@@ -1,2 +1,9 @@
 # Trinetra
-	 Centralized Vulnerability Detection and Intelligent Query Interface --Code Nexus || AMrita Vishwa Vidyapeetham, Bengaluru Campus
+	**SIH - 2025**
+	
+	 Centralized Vulnerability Detection and Intelligent Query Interface 
+	 
+	 **Code Nexus 
+	**
+	 **Amrita Vishwa Vidyapeetham, Bengaluru Campus
+**
