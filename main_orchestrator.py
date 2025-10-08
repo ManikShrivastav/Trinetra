@@ -11,7 +11,7 @@ import logging
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -35,16 +35,14 @@ AVAILABLE_WORKERS = {
 }
 
 def utc_timestamp():
-    """Return UTC timestamp string."""
-    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 def setup_logging(log_level: str):
     """Configure logging with specified level."""
     level = getattr(logging, log_level.upper(), logging.INFO)
     logging.basicConfig(
         level=level,
-        format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format='%(message)s',  # Only show the log message, no timestamp, level, or module
     )
 
 def parse_targets(targets_str: str = None, targets_file: str = None) -> List[str]:
