@@ -1,7 +1,7 @@
 # ⚠️  Use responsibly: Only scan targets you own or have explicit permission to test.
 
 """
-Nikto Scanner Worker Module
+Nmap Scanner Worker Module
 Provides standardized run() interface for the orchestrator.
 """
 
@@ -14,8 +14,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # Configuration
-NIKTO_TIMEOUT = 3600
-NIKTO_TUNING = "0123456789abc"
+NMAP_TIMEOUT = 3600
 
 # Utilities
 def safe_filename(s):
@@ -28,67 +27,71 @@ def utc_timestamp():
 
 def run(target: str, outdir: str = None, timeout: int = None, **kwargs) -> str:
     """
-    Executes Nikto scanner against `target`.
+    Executes Nmap scanner with vuln scripts against `target`.
     Returns output file path on success, raises exception on critical error.
     
     Args:
-        target: URL or IP to scan
-        outdir: Output directory (default: scans/nikto/)
-        timeout: Scan timeout in seconds (default: 1800)
-        **kwargs: Additional options (tuning, etc.)
+        target: IP or hostname to scan
+        outdir: Output directory (default: scans/nmap/)
+        timeout: Scan timeout in seconds (default: 600)
+        **kwargs: Additional options (script_args, ports, etc.)
     
     Returns:
-        Path to the output file
+        Path to the output XML file
         
     Raises:
-        RuntimeError: If nikto not found or scan fails critically
+        RuntimeError: If nmap not found or scan fails critically
     """
     if outdir is None:
-        outdir = "scans/nikto"
+        outdir = "scans/nmap"
     if timeout is None:
-        timeout = NIKTO_TIMEOUT
+        timeout = NMAP_TIMEOUT
     
     os.makedirs(outdir, exist_ok=True)
     
     # Sanitize target for filename
     name = safe_filename(target)
     timestamp = utc_timestamp()
-    out_path = os.path.join(outdir, f"nikto_{name}_{timestamp}.txt")
+    out_path = os.path.join(outdir, f"nmap_{name}_{timestamp}.xml")
     
     # Build command
-    tuning = kwargs.get("tuning", NIKTO_TUNING)
+    scripts = kwargs.get("scripts", "vulners,vuln")
+    ports = kwargs.get("ports", None)
+    
     cmd = [
-        "nikto", 
-        "-h", target, 
-        "-Format", "txt",
-        "-output", out_path,
-        "-nointeractive",
-        "-Tuning", tuning
+        "nmap",
+        "-sV",
+        f"--script={scripts}",
+        "-oX", out_path,
+        target
     ]
     
-    logger.info(f"Running Nikto scan on {target}")
+    if ports:
+        cmd.insert(2, f"-p{ports}")
+    
+    logger.info(f"Running Nmap scan on {target}")
     logger.debug(f"Command: {' '.join(cmd)}")
     logger.debug(f"Output: {out_path}")
     
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        raise RuntimeError("nikto not found in PATH")
+        raise RuntimeError("nmap not found in PATH")
     except subprocess.TimeoutExpired:
-        raise RuntimeError(f"Nikto scan timed out after {timeout}s")
+        raise RuntimeError(f"Nmap scan timed out after {timeout}s")
     except Exception as e:
-        raise RuntimeError(f"Nikto execution error: {e}")
+        raise RuntimeError(f"Nmap execution error: {e}")
     
-    # Nikto may return non-zero even on success
+    # Nmap usually returns 0 on success
     if proc.returncode != 0:
-        logger.warning(f"Nikto returned exit code {proc.returncode}")
+        logger.warning(f"Nmap returned exit code {proc.returncode}")
         logger.debug(f"stderr: {proc.stderr[:500]}")
     
     # Check if output file was created
     if not os.path.exists(out_path):
-        raise RuntimeError("Nikto did not create output file")
+        raise RuntimeError("Nmap did not create output file")
     
-    logger.info(f"Nikto scan completed: {out_path}")
+    logger.info(f"Nmap scan completed: {out_path}")
     return out_path
 
 
@@ -97,10 +100,12 @@ if __name__ == "__main__":
     import sys
     import argparse
     
-    parser = argparse.ArgumentParser(description="Nikto scanner worker")
-    parser.add_argument("target", help="Target URL or IP")
-    parser.add_argument("--outdir", default="scans/nikto", help="Output directory")
-    parser.add_argument("--timeout", type=int, default=1800, help="Timeout in seconds")
+    parser = argparse.ArgumentParser(description="Nmap scanner worker")
+    parser.add_argument("target", help="Target IP or hostname")
+    parser.add_argument("--outdir", default="scans/nmap", help="Output directory")
+    parser.add_argument("--timeout", type=int, default=600, help="Timeout in seconds")
+    parser.add_argument("--scripts", default="vulners,vuln", help="NSE scripts to run")
+    parser.add_argument("--ports", default=None, help="Ports to scan (e.g., 80,443 or 1-1000)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     
     args = parser.parse_args()
@@ -111,7 +116,7 @@ if __name__ == "__main__":
     )
     
     try:
-        output = run(args.target, args.outdir, args.timeout)
+        output = run(args.target, args.outdir, args.timeout, scripts=args.scripts, ports=args.ports)
         print(f"Success: {output}")
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
