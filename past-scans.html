@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Past Scans - Trinetra</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <button class="menu-toggle" id="menuToggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <a href="index.html" class="logo">Trinetra</a>
+        </div>
+        <div class="nav-right">
+            <div class="theme-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div id="authButtons" class="auth-buttons">
+                <button class="btn-secondary" id="loginBtn">Login</button>
+                <button class="btn-primary" id="signupBtn">Sign Up</button>
+            </div>
+            <div id="profileSection" class="profile-section hidden">
+                <div class="profile-dropdown">
+                    <button class="profile-btn" id="profileBtn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span id="username">User</span>
+                    </button>
+                    <div class="dropdown-menu hidden" id="dropdownMenu">
+                        <button id="logoutBtn">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <aside class="sidebar" id="sidebar">
+        <nav class="sidebar-nav">
+            <a href="index.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <path d="M9 9h6v6H9z"></path>
+                </svg>
+                Dashboard
+            </a>
+            <a href="scan.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                Scan
+            </a>
+            <a href="past-scans.html" class="sidebar-link active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                Past Scans
+            </a>
+            <a href="bot.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                Bot
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content" id="mainContent">
+        <div class="past-scans-page">
+            <div class="dashboard-header">
+                <h1>Past Scans</h1>
+                <p class="subtitle">Review historical vulnerability scan reports</p>
+            </div>
+
+            <div class="filters-section">
+                <input type="text" class="search-input" placeholder="Search by target IP..." id="searchInput">
+                <select class="filter-select" id="severityFilter">
+                    <option value="all">All Severity</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+
+            <div class="scans-list">
+                <div class="scan-card" data-scan-id="1">
+                    <div class="scan-card-header">
+                        <div class="scan-info">
+                            <h3>192.168.1.100</h3>
+                            <span class="scan-date">2025-10-02 14:32:18</span>
+                        </div>
+                        <div class="scan-badge critical-badge">Critical Issues Found</div>
+                    </div>
+                    <div class="scan-card-body">
+                        <div class="vulnerability-counts">
+                            <span class="count-item critical">
+                                <strong>8</strong> Critical
+                            </span>
+                            <span class="count-item high">
+                                <strong>15</strong> High
+                            </span>
+                            <span class="count-item medium">
+                                <strong>23</strong> Medium
+                            </span>
+                            <span class="count-item low">
+                                <strong>12</strong> Low
+                            </span>
+                        </div>
+                        <div class="scan-summary">
+                            Multiple critical vulnerabilities detected including outdated SSL/TLS protocols,
+                            unpatched services, and open administrative ports.
+                        </div>
+                    </div>
+                    <div class="scan-card-footer">
+                        <button class="btn-secondary btn-small view-details" data-scan-id="1">View Details</button>
+                    </div>
+                </div>
+
+                <div class="scan-card" data-scan-id="2">
+                    <div class="scan-card-header">
+                        <div class="scan-info">
+                            <h3>10.0.0.50</h3>
+                            <span class="scan-date">2025-10-01 09:15:42</span>
+                        </div>
+                        <div class="scan-badge high-badge">High Risk</div>
+                    </div>
+                    <div class="scan-card-body">
+                        <div class="vulnerability-counts">
+                            <span class="count-item critical">
+                                <strong>2</strong> Critical
+                            </span>
+                            <span class="count-item high">
+                                <strong>11</strong> High
+                            </span>
+                            <span class="count-item medium">
+                                <strong>18</strong> Medium
+                            </span>
+                            <span class="count-item low">
+                                <strong>9</strong> Low
+                            </span>
+                        </div>
+                        <div class="scan-summary">
+                            Web server vulnerabilities detected with SQL injection possibilities and
+                            cross-site scripting risks.
+                        </div>
+                    </div>
+                    <div class="scan-card-footer">
+                        <button class="btn-secondary btn-small view-details" data-scan-id="2">View Details</button>
+                    </div>
+                </div>
+
+                <div class="scan-card" data-scan-id="3">
+                    <div class="scan-card-header">
+                        <div class="scan-info">
+                            <h3>172.16.0.25</h3>
+                            <span class="scan-date">2025-09-30 16:48:03</span>
+                        </div>
+                        <div class="scan-badge medium-badge">Medium Risk</div>
+                    </div>
+                    <div class="scan-card-body">
+                        <div class="vulnerability-counts">
+                            <span class="count-item critical">
+                                <strong>0</strong> Critical
+                            </span>
+                            <span class="count-item high">
+                                <strong>3</strong> High
+                            </span>
+                            <span class="count-item medium">
+                                <strong>14</strong> Medium
+                            </span>
+                            <span class="count-item low">
+                                <strong>22</strong> Low
+                            </span>
+                        </div>
+                        <div class="scan-summary">
+                            Moderate security concerns with outdated software versions and
+                            missing security headers.
+                        </div>
+                    </div>
+                    <div class="scan-card-footer">
+                        <button class="btn-secondary btn-small view-details" data-scan-id="3">View Details</button>
+                    </div>
+                </div>
+
+                <div class="scan-card" data-scan-id="4">
+                    <div class="scan-card-header">
+                        <div class="scan-info">
+                            <h3>192.168.1.0/24</h3>
+                            <span class="scan-date">2025-09-28 11:22:56</span>
+                        </div>
+                        <div class="scan-badge low-badge">Low Risk</div>
+                    </div>
+                    <div class="scan-card-body">
+                        <div class="vulnerability-counts">
+                            <span class="count-item critical">
+                                <strong>0</strong> Critical
+                            </span>
+                            <span class="count-item high">
+                                <strong>1</strong> High
+                            </span>
+                            <span class="count-item medium">
+                                <strong>5</strong> Medium
+                            </span>
+                            <span class="count-item low">
+                                <strong>18</strong> Low
+                            </span>
+                        </div>
+                        <div class="scan-summary">
+                            Network segment scan shows minimal security concerns with minor
+                            configuration improvements recommended.
+                        </div>
+                    </div>
+                    <div class="scan-card-footer">
+                        <button class="btn-secondary btn-small view-details" data-scan-id="4">View Details</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal hidden" id="detailsModal">
+        <div class="modal-content modal-large">
+            <button class="modal-close" id="modalClose">&times;</button>
+            <h2>Scan Report Details</h2>
+            <div id="modalBody">
+                <div class="report-header">
+                    <div class="report-info">
+                        <div class="info-row">
+                            <strong>Target:</strong> <span id="modalTarget"></span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Scan Date:</strong> <span id="modalDate"></span>
+                        </div>
+                        <div class="info-row">
+                            <strong>Scanners Used:</strong> <span>Nmap, OpenVAS, Nessus, Qualys, Nikto</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="report-vulnerabilities">
+                    <h3>Critical Vulnerabilities</h3>
+                    <div class="vulnerability-item critical-item">
+                        <div class="vuln-header">
+                            <strong>CVE-2024-1234: Remote Code Execution in Apache</strong>
+                            <span class="severity-badge critical">CRITICAL</span>
+                        </div>
+                        <p>Detected by: Nessus, OpenVAS</p>
+                        <p class="vuln-description">
+                            Unpatched Apache web server vulnerable to remote code execution.
+                            Immediate patching required.
+                        </p>
+                    </div>
+                    <h3>High Vulnerabilities</h3>
+                    <div class="vulnerability-item high-item">
+                        <div class="vuln-header">
+                            <strong>Weak SSL/TLS Configuration</strong>
+                            <span class="severity-badge high">HIGH</span>
+                        </div>
+                        <p>Detected by: Nmap, Qualys</p>
+                        <p class="vuln-description">
+                            Server supports outdated SSL protocols and weak cipher suites.
+                        </p>
+                    </div>
+                    <h3>Medium Vulnerabilities</h3>
+                    <div class="vulnerability-item medium-item">
+                        <div class="vuln-header">
+                            <strong>Missing Security Headers</strong>
+                            <span class="severity-badge medium">MEDIUM</span>
+                        </div>
+                        <p>Detected by: Nikto</p>
+                        <p class="vuln-description">
+                            Web server missing important security headers like X-Frame-Options and CSP.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/past-scans.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

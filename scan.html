@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan - Trinetra</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <button class="menu-toggle" id="menuToggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <a href="index.html" class="logo">Trinetra</a>
+        </div>
+        <div class="nav-right">
+            <div class="theme-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="themeToggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div id="authButtons" class="auth-buttons">
+                <button class="btn-secondary" id="loginBtn">Login</button>
+                <button class="btn-primary" id="signupBtn">Sign Up</button>
+            </div>
+            <div id="profileSection" class="profile-section hidden">
+                <div class="profile-dropdown">
+                    <button class="profile-btn" id="profileBtn">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        <span id="username">User</span>
+                    </button>
+                    <div class="dropdown-menu hidden" id="dropdownMenu">
+                        <button id="logoutBtn">Logout</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <aside class="sidebar" id="sidebar">
+        <nav class="sidebar-nav">
+            <a href="index.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <path d="M9 9h6v6H9z"></path>
+                </svg>
+                Dashboard
+            </a>
+            <a href="scan.html" class="sidebar-link active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                Scan
+            </a>
+            <a href="past-scans.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                Past Scans
+            </a>
+            <a href="bot.html" class="sidebar-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+                Bot
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main-content" id="mainContent">
+        <div class="scan-page">
+            <div class="dashboard-header">
+                <h1>Vulnerability Scan</h1>
+                <p class="subtitle">Enter target IP address or network to begin comprehensive security analysis</p>
+            </div>
+
+            <div class="scan-input-section" id="scanInputSection">
+                <form class="scan-form" id="scanForm">
+                    <div class="form-group">
+                        <label for="targetIp">Target IP Address / Network</label>
+                        <input type="text" id="targetIp" placeholder="e.g., 192.168.1.1 or 192.168.1.0/24" required>
+                    </div>
+                    <div class="scanner-options">
+                        <label>Scanners (5 parallel threads)</label>
+                        <div class="scanner-list">
+                            <div class="scanner-item">
+                                <input type="checkbox" id="nmap" checked disabled>
+                                <label for="nmap">Nmap</label>
+                            </div>
+                            <div class="scanner-item">
+                                <input type="checkbox" id="openvas" checked disabled>
+                                <label for="openvas">OpenVAS</label>
+                            </div>
+                            <div class="scanner-item">
+                                <input type="checkbox" id="nessus" checked disabled>
+                                <label for="nessus">Nessus</label>
+                            </div>
+                            <div class="scanner-item">
+                                <input type="checkbox" id="qualys" checked disabled>
+                                <label for="qualys">Qualys</label>
+                            </div>
+                            <div class="scanner-item">
+                                <input type="checkbox" id="nikto" checked disabled>
+                                <label for="nikto">Nikto</label>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary btn-large">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Start Scan
+                    </button>
+                </form>
+            </div>
+
+            <div class="scan-progress-section hidden" id="scanProgressSection">
+                <h2>Scanning in Progress</h2>
+                <div class="target-info">
+                    <strong>Target:</strong> <span id="scanTarget"></span>
+                </div>
+                <div class="scanners-progress">
+                    <div class="scanner-progress">
+                        <div class="scanner-name">
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"></path>
+                            </svg>
+                            Nmap
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-status">Initializing...</span>
+                    </div>
+                    <div class="scanner-progress">
+                        <div class="scanner-name">
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"></path>
+                            </svg>
+                            OpenVAS
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-status">Initializing...</span>
+                    </div>
+                    <div class="scanner-progress">
+                        <div class="scanner-name">
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"></path>
+                            </svg>
+                            Nessus
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-status">Initializing...</span>
+                    </div>
+                    <div class="scanner-progress">
+                        <div class="scanner-name">
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"></path>
+                            </svg>
+                            Qualys
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-status">Initializing...</span>
+                    </div>
+                    <div class="scanner-progress">
+                        <div class="scanner-name">
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none" opacity="0.25"></circle>
+                                <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="4" fill="none"></path>
+                            </svg>
+                            Nikto
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span class="progress-status">Initializing...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="scan-results-section hidden" id="scanResultsSection">
+                <h2>Scan Results</h2>
+                <div class="target-info">
+                    <strong>Target:</strong> <span id="resultTarget"></span>
+                </div>
+                <div class="results-summary">
+                    <div class="summary-item critical-item">
+                        <span class="summary-count" id="criticalCount">0</span>
+                        <span class="summary-label">Critical</span>
+                    </div>
+                    <div class="summary-item high-item">
+                        <span class="summary-count" id="highCount">0</span>
+                        <span class="summary-label">High</span>
+                    </div>
+                    <div class="summary-item medium-item">
+                        <span class="summary-count" id="mediumCount">0</span>
+                        <span class="summary-label">Medium</span>
+                    </div>
+                    <div class="summary-item low-item">
+                        <span class="summary-count" id="lowCount">0</span>
+                        <span class="summary-label">Low</span>
+                    </div>
+                </div>
+                <div class="vulnerabilities-list" id="vulnerabilitiesList"></div>
+                <button class="btn-primary" id="newScanBtn">Start New Scan</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/scan.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
