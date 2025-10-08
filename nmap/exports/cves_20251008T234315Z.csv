@@ -1,0 +1,9 @@
+scan_time,target_input,cve_id,cvss_v3_score,cvss_v3_severity,cvss_v2_score,description,references,components
+20251008T234315Z,192.168.127.140/24,CVE-2020-25681,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25682,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25683,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25684,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25685,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25686,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2020-25687,,,,,,tcp/53|domain|dnsmasq|2.51
+20251008T234315Z,192.168.127.140/24,CVE-2021-3448,,,,,,tcp/53|domain|dnsmasq|2.51

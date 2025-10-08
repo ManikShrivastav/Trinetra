@@ -1,0 +1,2 @@
+scan_time,target_input,address,host_status,os,port,protocol,state,service_name,product,version,extrainfo,script_ids
+20251008T234315Z,192.168.127.140/24,192.168.127.8,up,,53,tcp,open,domain,dnsmasq,2.51,,vulners
