@@ -106,7 +106,7 @@ def parse_workers(use_str: str = None) -> Dict[str, Any]:
     logger.info(f"Using selected workers: {', '.join(selected.keys())}")
     return selected
 
-def run_worker(worker_name: str, worker_module: Any, target: str, **kwargs) -> Dict[str, Any]:
+def run_worker(worker_name: str, worker_module: Any, target: str, progress_callback=None, **kwargs) -> Dict[str, Any]:
     """
     Execute a single worker against a target.
     
@@ -114,6 +114,7 @@ def run_worker(worker_name: str, worker_module: Any, target: str, **kwargs) -> D
         worker_name: Name of the worker
         worker_module: Worker module with run() function
         target: Target to scan
+        progress_callback: Optional callback function(worker_name, target, status)
         **kwargs: Additional arguments to pass to worker
     
     Returns:
@@ -121,9 +122,16 @@ def run_worker(worker_name: str, worker_module: Any, target: str, **kwargs) -> D
     """
     logger.info(f"[{target}] Starting {worker_name} scan")
     
+    if progress_callback:
+        progress_callback(worker_name, target, "running")
+    
     try:
         output_path = worker_module.run(target, **kwargs)
         logger.info(f"[{target}] {worker_name} scan completed successfully")
+        
+        if progress_callback:
+            progress_callback(worker_name, target, "done")
+        
         return {
             "output": output_path,
             "ok": True,
@@ -131,13 +139,17 @@ def run_worker(worker_name: str, worker_module: Any, target: str, **kwargs) -> D
         }
     except Exception as e:
         logger.exception(f"[{target}] {worker_name} scan failed: {e}")
+        
+        if progress_callback:
+            progress_callback(worker_name, target, "failed")
+        
         return {
             "output": None,
             "ok": False,
             "error": str(e)
         }
 
-def scan_target(target: str, workers: Dict[str, Any], worker_timeout: int = None) -> Dict[str, Any]:
+def scan_target(target: str, workers: Dict[str, Any], worker_timeout: int = None, progress_callback=None) -> Dict[str, Any]:
     """
     Scan a single target with all selected workers in parallel.
     
@@ -145,6 +157,7 @@ def scan_target(target: str, workers: Dict[str, Any], worker_timeout: int = None
         target: Target to scan
         workers: Dictionary of worker modules to use
         worker_timeout: Timeout for each worker
+        progress_callback: Optional callback function(worker_name, target, status)
     
     Returns:
         Results dictionary for this target
@@ -160,7 +173,7 @@ def scan_target(target: str, workers: Dict[str, Any], worker_timeout: int = None
     # Run all workers for this target in parallel
     with ThreadPoolExecutor(max_workers=len(workers)) as executor:
         future_to_worker = {
-            executor.submit(run_worker, name, module, target, timeout=worker_timeout): name
+            executor.submit(run_worker, name, module, target, progress_callback, timeout=worker_timeout): name
             for name, module in workers.items()
         }
         
@@ -184,7 +197,8 @@ def run_orchestrator(
     targets: List[str],
     workers: Dict[str, Any],
     max_target_workers: int = 1,
-    worker_timeout: int = None
+    worker_timeout: int = None,
+    progress_callback=None
 ) -> List[Dict[str, Any]]:
     """
     Orchestrate scanning of multiple targets.
@@ -194,6 +208,7 @@ def run_orchestrator(
         workers: Dictionary of worker modules to use
         max_target_workers: Maximum number of targets to scan in parallel
         worker_timeout: Timeout for each worker execution
+        progress_callback: Optional callback function(worker_name, target, status)
     
     Returns:
         List of result dictionaries, one per target
@@ -207,7 +222,7 @@ def run_orchestrator(
     # Scan targets in parallel (limited by max_target_workers)
     with ThreadPoolExecutor(max_workers=max_target_workers) as executor:
         future_to_target = {
-            executor.submit(scan_target, target, workers, worker_timeout): target
+            executor.submit(scan_target, target, workers, worker_timeout, progress_callback): target
             for target in targets
         }
         
