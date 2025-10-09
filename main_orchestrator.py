@@ -130,7 +130,7 @@ def run_worker(worker_name: str, worker_module: Any, target: str, **kwargs) -> D
             "error": None
         }
     except Exception as e:
-        logger.error(f"[{target}] {worker_name} scan failed: {e}")
+        logger.exception(f"[{target}] {worker_name} scan failed: {e}")
         return {
             "output": None,
             "ok": False,
@@ -170,7 +170,7 @@ def scan_target(target: str, workers: Dict[str, Any], worker_timeout: int = None
                 result = future.result()
                 results["results"][worker_name] = result
             except Exception as e:
-                logger.error(f"[{target}] Unexpected error in {worker_name}: {e}")
+                logger.exception(f"[{target}] Unexpected error in {worker_name}: {e}")
                 results["results"][worker_name] = {
                     "output": None,
                     "ok": False,
@@ -217,7 +217,7 @@ def run_orchestrator(
                 result = future.result()
                 all_results.append(result)
             except Exception as e:
-                logger.error(f"[{target}] Critical error during scan: {e}")
+                logger.exception(f"[{target}] Critical error during scan: {e}")
                 all_results.append({
                     "target": target,
                     "timestamp": utc_timestamp(),
@@ -382,16 +382,16 @@ Available workers: nikto, nmap, nuclei
         print(f"Detailed results saved to: {summary_path}")
         
     except ValueError as e:
-        logger.error(f"Configuration error: {e}")
+        logger.exception(f"Configuration error: {e}")
         sys.exit(1)
     except FileNotFoundError as e:
-        logger.error(f"File error: {e}")
+        logger.exception(f"File error: {e}")
         sys.exit(1)
     except KeyboardInterrupt:
         logger.warning("Scan interrupted by user")
         sys.exit(130)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
+        logger.exception(f"Unexpected error: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
