@@ -13,7 +13,7 @@
 
     <!-- @vite('resources/css/custom-color.css') {{-- This loads Tailwind CSS --}} -->
     @vite('resources/js/app.js')   {{-- Optional: if you have main JS file --}}
-    @vite('resources/js/components/captcha.js')   {{-- Optional: if you have main JS file --}}
+    <!-- @vite('resources/js/components/captcha.js')   {{-- Optional: if you have main JS file --}} -->
 
 
     <link rel="icon" type="image/png" href="https://img.icons8.com/?size=100&id=85726&format=png&color=00FFFF"/>
@@ -36,7 +36,16 @@
       </h1>
       <!-- <p class="text-center text-gray-500 dark:text-gray-400 mb-6">Centralized Vulnerability Detection & Intelligent Query Interface</p> -->
 
-      <form id="loginForm" class="space-y-5">
+      <form id="loginForm" class="space-y-5" action="{{ route('login.post') }}" method="POST">
+        @csrf
+
+        @if ($errors->any())
+    <div class="text-red-500 mt-2">
+        @foreach ($errors->all() as $error)
+            <p>{{ $error }}</p>
+        @endforeach
+    </div>
+@endif
         <div>
           <label
             for="userId"
@@ -46,9 +55,9 @@
           <input
             type="text"
             id="userId"
-            name="userId"
+            name="userid"
             required
-            value =""
+            
             class="w-full mt-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cya-400 outline-none transition"
           />
         </div>
@@ -63,6 +72,7 @@
             type="password"
             id="password"
             name="password"
+            placeholder="Enter Password" autocomplete="off"
             required
             class="w-full mt-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cya-400 outline-none transition"
           />
@@ -76,22 +86,18 @@
           >
           <select
             id="role"
-            name="role"
+            name="role_id"
             required
             class="w-full mt-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cya-400 outline-none transition"
           >
-            <option value="">Select Role</option>
-            <option value="admin">Admin</option>
-            <option value="officer">Security Officer</option>
-            <option value="analyst">Analyst</option>
-            <option value="helper">Technical Helper</option>
-            <option value="vice-head">Vice Head</option>
-            <option value="intern">Intern</option>
+           @foreach($roles as $role)
+        <option value="{{ $role->id }}">{{ ucfirst($role->name) }}</option>
+    @endforeach
           </select>
         </div>
 
         <!-- CAPTCHA Section -->
-        <div>
+        <!-- <div>
           <label
             class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >Security Check</label
@@ -119,7 +125,7 @@
             placeholder="Enter the code"
             class="w-full mt-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cya-400 outline-none transition"
           />
-        </div>
+        </div> -->
 
         <button
           type="submit"

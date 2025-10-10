@@ -28,9 +28,15 @@ Route::get('/check-session', function () {
     }
 });
 
+Route::get('/dashboard', [DashboardController::class, 'showDashboard'])
+     ->middleware('auth.session')
+     ->name('dashboard');
+
+
 Route::get('/login', [LoginController::class, 'showLogin'])->name('login');
 Route::post('/login', [LoginController::class, 'login'])->name('login.post');
-Route::get('/dashboard', [DashboardController::class, 'showDashboard'])->name('dashboard');
+
 
 Route::view('/500', '500')->name('500');
 
+Route::post('/logout', [LoginController::class, 'logout'])->name('logout');

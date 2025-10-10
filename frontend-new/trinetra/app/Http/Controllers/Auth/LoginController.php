@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Session;
 
 class LoginController extends Controller
 {
@@ -18,21 +21,49 @@ class LoginController extends Controller
             session()->regenerateToken();
         }
 
-        return view('auth.login'); // This will load resources/views/auth/login.blade.php
+        $roles = DB::table('roles')->get();
+        return view('auth.login', compact('roles')); // This will load resources/views/auth/login.blade.php
     }
 
     // Handle login form POST
     public function login(Request $request)
     {
-        $credentials = $request->only('email', 'password', 'role');
+       
+       $request->validate([
+            'userid' => 'required|string',
+            'password' => 'required|string',
+            'role_id' => 'required|integer',
+        ]);
 
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
-            return redirect()->intended('/dashboard');
+        // Fetch user by userid
+        $user = DB::table('praveshjankari')->where('userid', $request->userid)->first();
+
+        if (!$user) {
+            return back()->withErrors(['login_error' => 'User ID does not exist']);
         }
 
-        return back()->withErrors([
-            'login_error' => 'Invalid credentials, please try again.',
-        ]);
+        // Password check
+        if (!Hash::check($request->password, $user->password)) {
+            return back()->withErrors(['login_error' => 'Incorrect password']);
+        }
+
+        // Role check
+        if ($user->role_id != $request->role_id) {
+            return back()->withErrors(['login_error' => 'Selected role is incorrect']);
+        }
+
+        // All good → create session
+        Session::put('user_id', $user->id);
+        Session::put('user_name', $user->name);
+        Session::put('role_id', $user->role_id);
+
+        return redirect()->route('dashboard');
+    }
+
+    // Logout
+    public function logout()
+    {
+        Session::flush();
+        return redirect()->route('login');
     }
 }
