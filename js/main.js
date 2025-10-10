@@ -32,15 +32,15 @@ if (loginBtn && authModal && modalTitle && switchText && switchMode) {
   });
 }
 
-if (signupBtn && authModal && modalTitle && switchText && switchMode) {
-  signupBtn.addEventListener('click', () => {
-    isLoginMode = false;
-    modalTitle.textContent = 'Sign Up';
-    switchText.textContent = 'Already have an account?';
-    switchMode.textContent = 'Login';
-    authModal.classList.remove('hidden');
-  });
-}
+// if (signupBtn && authModal && modalTitle && switchText && switchMode) {
+//   signupBtn.addEventListener('click', () => {
+//     isLoginMode = false;
+//     modalTitle.textContent = 'Sign Up';
+//     switchText.textContent = 'Already have an account?';
+//     switchMode.textContent = 'Login';
+//     authModal.classList.remove('hidden');
+//   });
+// }
 
 if (modalClose && authModal) {
   modalClose.addEventListener('click', () => {
