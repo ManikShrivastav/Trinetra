@@ -50,16 +50,73 @@ function renderScanHistory(scans) {
                          scan.status === 'failed' ? 'critical' : 'medium';
     const severityText = scan.status.charAt(0).toUpperCase() + scan.status.slice(1);
     
+    // Get risk summary data
+    const riskSummary = scan.risk_summary || {
+      total_vulnerabilities: 0,
+      critical_count: 0,
+      high_count: 0,
+      medium_count: 0,
+      low_count: 0,
+      highest_severity: 'none',
+      average_cvss: 0
+    };
+    
+    // Determine highest severity badge
+    const highestSeverity = riskSummary.highest_severity || 'none';
+    const severityBadgeClass = highestSeverity !== 'none' ? highestSeverity : 'low';
+    const severityBadgeText = highestSeverity.toUpperCase();
+    
     return `
       <div class="scan-card" data-scan-id="${scan.scan_id}">
         <div class="scan-info">
           <h3>${scan.target}</h3>
           <p class="scan-date">${new Date(scan.timestamp).toLocaleString()}</p>
-          <p>Targets: ${scan.total_targets}</p>
+          <div class="scan-meta">
+            <span>Targets: ${scan.total_targets}</span>
+            <span>Tools: ${(scan.workers || ['nmap', 'nikto', 'nuclei']).join(', ')}</span>
+          </div>
+        </div>
+        <div class="scan-summary">
+          <div class="summary-stats">
+            <div class="stat-item">
+              <span class="stat-count">${riskSummary.total_vulnerabilities}</span>
+              <span class="stat-label">Total</span>
+            </div>
+            <div class="stat-item critical">
+              <span class="stat-count">${riskSummary.critical_count}</span>
+              <span class="stat-label">Critical</span>
+            </div>
+            <div class="stat-item high">
+              <span class="stat-count">${riskSummary.high_count}</span>
+              <span class="stat-label">High</span>
+            </div>
+            <div class="stat-item medium">
+              <span class="stat-count">${riskSummary.medium_count}</span>
+              <span class="stat-label">Medium</span>
+            </div>
+            <div class="stat-item low">
+              <span class="stat-count">${riskSummary.low_count}</span>
+              <span class="stat-label">Low</span>
+            </div>
+          </div>
+          ${riskSummary.average_cvss > 0 ? `
+            <div class="cvss-average">
+              Avg CVSS: <strong>${riskSummary.average_cvss}</strong>
+            </div>
+          ` : ''}
+          <span class="severity-badge ${severityBadgeClass}">${severityBadgeText}</span>
         </div>
         <div class="scan-actions">
           <span class="scan-badge ${severityClass}">${severityText}</span>
           <button class="view-details" data-scan-id="${scan.scan_id}">View Details</button>
+          <button class="download-csv" data-scan-id="${scan.scan_id}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            CSV
+          </button>
         </div>
       </div>
     `;
@@ -67,6 +124,44 @@ function renderScanHistory(scans) {
   
   // Re-attach event listeners
   attachViewDetailsListeners();
+  attachDownloadCsvListeners();
+}
+
+function attachDownloadCsvListeners() {
+  const downloadButtons = document.querySelectorAll('.download-csv');
+  downloadButtons.forEach(button => {
+    button.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const scanId = e.currentTarget.dataset.scanId;
+      await downloadCsv(scanId);
+    });
+  });
+}
+
+async function downloadCsv(scanId) {
+  try {
+    const response = await fetch(`/api/export/csv/${scanId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to download CSV');
+    }
+    
+    // Create blob from response
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scan_${scanId}_results.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    console.log('CSV downloaded successfully');
+  } catch (error) {
+    console.error('Error downloading CSV:', error);
+    alert('Failed to download CSV: ' + error.message);
+  }
 }
 
 function attachViewDetailsListeners() {
@@ -99,15 +194,94 @@ function displayScanDetails(scanDetails) {
   document.getElementById('modalTarget').textContent = targets;
   document.getElementById('modalDate').textContent = new Date(scanDetails.scan_timestamp).toLocaleString();
   
-  // Display detailed results
-  const detailsContainer = document.querySelector('#detailsModal .vulnerability-item') || 
-                          document.querySelector('#detailsModal .modal-body');
+  // Get vulnerabilities and risk summary
+  const vulnerabilities = scanDetails.vulnerabilities || [];
+  const riskSummary = scanDetails.risk_summary || {
+    total_vulnerabilities: 0,
+    critical_count: 0,
+    high_count: 0,
+    medium_count: 0,
+    low_count: 0
+  };
   
-  if (detailsContainer) {
+  // Display detailed results
+  const modalBody = document.querySelector('#detailsModal .modal-body');
+  
+  if (modalBody) {
     let detailsHTML = '<div class="scan-details">';
     
+    // Add risk summary section
+    detailsHTML += `
+      <div class="risk-summary-section">
+        <h4>Risk Summary</h4>
+        <div class="summary-stats">
+          <div class="stat-item">
+            <span class="stat-count">${riskSummary.total_vulnerabilities}</span>
+            <span class="stat-label">Total Vulnerabilities</span>
+          </div>
+          <div class="stat-item critical">
+            <span class="stat-count">${riskSummary.critical_count}</span>
+            <span class="stat-label">Critical</span>
+          </div>
+          <div class="stat-item high">
+            <span class="stat-count">${riskSummary.high_count}</span>
+            <span class="stat-label">High</span>
+          </div>
+          <div class="stat-item medium">
+            <span class="stat-count">${riskSummary.medium_count}</span>
+            <span class="stat-label">Medium</span>
+          </div>
+          <div class="stat-item low">
+            <span class="stat-count">${riskSummary.low_count}</span>
+            <span class="stat-label">Low</span>
+          </div>
+        </div>
+        ${riskSummary.average_cvss ? `
+          <p style="margin-top: 12px;">Average CVSS Score: <strong>${riskSummary.average_cvss}</strong></p>
+        ` : ''}
+      </div>
+    `;
+    
+    // Add vulnerabilities section
+    if (vulnerabilities.length > 0) {
+      detailsHTML += '<h4 style="margin-top: 24px;">Vulnerabilities</h4>';
+      
+      vulnerabilities.forEach(vuln => {
+        const severityClass = vuln.severity ? vuln.severity.toLowerCase() : 'low';
+        const severityBadge = vuln.severity ? vuln.severity.toUpperCase() : 'UNKNOWN';
+        
+        detailsHTML += `
+          <div class="vulnerability-item ${severityClass}-item">
+            <div class="vuln-header">
+              <div>
+                <strong>${vuln.cve_id || 'Unknown CVE'}</strong>
+                <span class="severity-badge ${severityClass}">${severityBadge}</span>
+              </div>
+              <div class="cvss-scores">
+                ${vuln.cvss_v3 && vuln.cvss_v3 !== 'N/A' ? `<span class="cvss-badge">CVSS v3: ${vuln.cvss_v3}</span>` : ''}
+                ${vuln.cvss_v2 && vuln.cvss_v2 !== 'N/A' ? `<span class="cvss-badge">CVSS v2: ${vuln.cvss_v2}</span>` : ''}
+              </div>
+            </div>
+            <p><strong>Source:</strong> ${vuln.source_tool || 'Unknown'} | <strong>Target:</strong> ${vuln.target || 'N/A'}</p>
+            <p class="vuln-description"><strong>Description:</strong> ${vuln.description || 'No description available'}</p>
+            ${vuln.recommendation && vuln.recommendation !== 'See NVD for details' ? `
+              <p class="vuln-recommendation"><strong>Recommendation:</strong> ${vuln.recommendation}</p>
+            ` : ''}
+          </div>
+        `;
+      });
+    } else {
+      detailsHTML += `
+        <div class="no-vulnerabilities" style="margin-top: 24px;">
+          <p>No enriched vulnerabilities found in this scan.</p>
+        </div>
+      `;
+    }
+    
+    // Add scan results section
+    detailsHTML += '<h4 style="margin-top: 24px;">Scan Results</h4>';
     scanDetails.results.forEach(targetResult => {
-      detailsHTML += `<h4>Target: ${targetResult.target}</h4>`;
+      detailsHTML += `<h5>Target: ${targetResult.target}</h5>`;
       detailsHTML += '<div class="worker-results">';
       
       Object.entries(targetResult.results).forEach(([worker, result]) => {
@@ -130,16 +304,12 @@ function displayScanDetails(scanDetails) {
     
     detailsHTML += '</div>';
     
-    // Try to find the right container
-    const modalBody = document.querySelector('#detailsModal .modal-body');
-    if (modalBody) {
-      // Clear existing content and add new
-      const existingDetails = modalBody.querySelector('.scan-details');
-      if (existingDetails) {
-        existingDetails.remove();
-      }
-      modalBody.insertAdjacentHTML('beforeend', detailsHTML);
+    // Clear existing content and add new
+    const existingDetails = modalBody.querySelector('.scan-details');
+    if (existingDetails) {
+      existingDetails.remove();
     }
+    modalBody.insertAdjacentHTML('beforeend', detailsHTML);
   }
   
   detailsModal.classList.remove('hidden');

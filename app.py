@@ -3,6 +3,7 @@ FastAPI Backend for Trinetra Security Scanner
 Integrates frontend with orchestrator and worker modules.
 """
 
+import csv
 import json
 import logging
 import os
@@ -14,7 +15,7 @@ from typing import Dict, List, Optional
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 # Import orchestrator functions
@@ -61,6 +62,228 @@ def utc_timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def calculate_severity(cvss_score: float) -> str:
+    """
+    Calculate severity level from CVSS score.
+    
+    Args:
+        cvss_score: CVSS score (0.0-10.0)
+    
+    Returns:
+        Severity level: 'low', 'medium', 'high', or 'critical'
+    """
+    if cvss_score >= 9.0:
+        return 'critical'
+    elif cvss_score >= 7.0:
+        return 'high'
+    elif cvss_score >= 4.0:
+        return 'medium'
+    elif cvss_score > 0.0:
+        return 'low'
+    else:
+        return 'unknown'
+
+
+def get_cvss_score(cve_data: Dict) -> float:
+    """
+    Extract CVSS score from CVE data, preferring v3 over v2.
+    
+    Args:
+        cve_data: CVE data dictionary from NVD
+    
+    Returns:
+        CVSS score as float
+    """
+    # Try CVSS v3 first
+    if 'cvss_v3_score' in cve_data and cve_data['cvss_v3_score']:
+        try:
+            return float(cve_data['cvss_v3_score'])
+        except (ValueError, TypeError):
+            pass
+    
+    # Fall back to CVSS v2
+    if 'cvss_v2_score' in cve_data and cve_data['cvss_v2_score']:
+        try:
+            return float(cve_data['cvss_v2_score'])
+        except (ValueError, TypeError):
+            pass
+    
+    return 0.0
+
+
+def load_enriched_data(scan_id: str) -> List[Dict]:
+    """
+    Load enriched vulnerability data from scan results.
+    
+    Args:
+        scan_id: Scan ID
+    
+    Returns:
+        List of vulnerability dictionaries
+    """
+    vulnerabilities = []
+    
+    # Check for enriched files in scans directory
+    scan_dirs = ['nmap', 'nikto', 'nuclei']
+    
+    for scan_type in scan_dirs:
+        enriched_dir = SCANS_DIR / scan_type / 'enriched'
+        if not enriched_dir.exists():
+            continue
+        
+        # Find enriched files related to this scan
+        for enriched_file in enriched_dir.glob(f'*enriched*.json'):
+            try:
+                with open(enriched_file, 'r') as f:
+                    data = json.load(f)
+                    
+                    # Parse enriched data structure
+                    if 'enriched_cves' in data:
+                        for cve_id, cve_data in data['enriched_cves'].items():
+                            cvss_score = get_cvss_score(cve_data)
+                            
+                            vulnerabilities.append({
+                                'cve_id': cve_id,
+                                'description': cve_data.get('description', 'N/A'),
+                                'cvss_v2': cve_data.get('cvss_v2_score', 'N/A'),
+                                'cvss_v3': cve_data.get('cvss_v3_score', 'N/A'),
+                                'severity': calculate_severity(cvss_score),
+                                'recommendation': cve_data.get('references', 'See NVD for details'),
+                                'source_tool': scan_type.capitalize(),
+                                'target': data.get('target', 'N/A'),
+                                'timestamp': data.get('timestamp', 'N/A')
+                            })
+            except Exception as e:
+                logger.error(f"Error loading enriched file {enriched_file}: {e}")
+                continue
+    
+    return vulnerabilities
+
+
+def generate_csv_from_scan(scan_id: str) -> str:
+    """
+    Generate CSV file from scan results with enriched data.
+    
+    Args:
+        scan_id: Scan ID
+    
+    Returns:
+        Path to generated CSV file
+    """
+    vulnerabilities = load_enriched_data(scan_id)
+    
+    # Create CSV file
+    csv_path = SCANS_DIR / f"scan_{scan_id}_results.csv"
+    
+    with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+        fieldnames = ['CVE ID', 'Description', 'CVSS v2', 'CVSS v3', 'Severity', 
+                      'Recommendation', 'Source Tool', 'Target', 'Timestamp']
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        for vuln in vulnerabilities:
+            writer.writerow({
+                'CVE ID': vuln['cve_id'],
+                'Description': vuln['description'],
+                'CVSS v2': vuln['cvss_v2'],
+                'CVSS v3': vuln['cvss_v3'],
+                'Severity': vuln['severity'].upper(),
+                'Recommendation': vuln['recommendation'],
+                'Source Tool': vuln['source_tool'],
+                'Target': vuln['target'],
+                'Timestamp': vuln['timestamp']
+            })
+    
+    return str(csv_path)
+
+
+def calculate_risk_summary(vulnerabilities: List[Dict]) -> Dict:
+    """
+    Calculate risk summary from vulnerability list.
+    
+    Args:
+        vulnerabilities: List of vulnerability dictionaries
+    
+    Returns:
+        Risk summary dictionary
+    """
+    if not vulnerabilities:
+        return {
+            'total_vulnerabilities': 0,
+            'critical_count': 0,
+            'high_count': 0,
+            'medium_count': 0,
+            'low_count': 0,
+            'highest_severity': 'none',
+            'average_cvss': 0.0
+        }
+    
+    severity_counts = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0}
+    cvss_scores = []
+    
+    for vuln in vulnerabilities:
+        severity = vuln.get('severity', 'unknown').lower()
+        if severity in severity_counts:
+            severity_counts[severity] += 1
+        
+        # Get CVSS score
+        cvss_v3 = vuln.get('cvss_v3', 'N/A')
+        cvss_v2 = vuln.get('cvss_v2', 'N/A')
+        
+        try:
+            if cvss_v3 != 'N/A':
+                cvss_scores.append(float(cvss_v3))
+            elif cvss_v2 != 'N/A':
+                cvss_scores.append(float(cvss_v2))
+        except (ValueError, TypeError):
+            pass
+    
+    # Determine highest severity
+    if severity_counts['critical'] > 0:
+        highest_severity = 'critical'
+    elif severity_counts['high'] > 0:
+        highest_severity = 'high'
+    elif severity_counts['medium'] > 0:
+        highest_severity = 'medium'
+    elif severity_counts['low'] > 0:
+        highest_severity = 'low'
+    else:
+        highest_severity = 'none'
+    
+    # Calculate average CVSS
+    avg_cvss = sum(cvss_scores) / len(cvss_scores) if cvss_scores else 0.0
+    
+    return {
+        'total_vulnerabilities': len(vulnerabilities),
+        'critical_count': severity_counts['critical'],
+        'high_count': severity_counts['high'],
+        'medium_count': severity_counts['medium'],
+        'low_count': severity_counts['low'],
+        'highest_severity': highest_severity,
+        'average_cvss': round(avg_cvss, 2)
+    }
+
+
+def update_session_history(history: List[Dict]):
+    """
+    Update session history manifest file.
+    
+    Args:
+        history: List of scan history dictionaries
+    """
+    manifest_file = SCANS_DIR / "session_history.json"
+    
+    try:
+        with open(manifest_file, 'w') as f:
+            json.dump({
+                'last_updated': utc_timestamp(),
+                'total_scans': len(history),
+                'scans': history
+            }, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to update session history: {e}")
+
+
 def save_scan_status(scan_id: str, status: str, progress: Dict = None):
     """Save scan status to file."""
     status_file = SCANS_DIR / f"scan_{scan_id}_status.json"
@@ -85,35 +308,63 @@ def save_scan_status(scan_id: str, status: str, progress: Dict = None):
 def run_scan_background(scan_id: str, targets: List[str], worker_names: List[str]):
     """
     Background task to run the orchestrator scan.
-    Updates status as scan progresses.
+    Updates status as scan progresses with accurate percentages.
     """
     try:
         logger.info(f"[{scan_id}] Starting background scan for {len(targets)} target(s)")
         
-        # Initialize progress tracking
-        progress = {worker: "queued" for worker in worker_names}
+        # Initialize progress tracking with percentages
+        total_tasks = len(targets) * len(worker_names)
+        completed_tasks = 0
+        
+        progress = {
+            "workers": {worker: {"status": "queued", "progress": 0} for worker in worker_names},
+            "overall": 0,
+            "completed_tasks": 0,
+            "total_tasks": total_tasks
+        }
         save_scan_status(scan_id, "running", progress)
         
         # Parse workers
         workers = main_orchestrator.parse_workers(",".join(worker_names))
         
-        # Update progress as each worker starts/completes
-        # Note: This is a simplified version. For real-time updates,
-        # you'd need to modify the orchestrator to accept callbacks
-        for worker in worker_names:
-            progress[worker] = "running"
+        # Create a callback to update progress
+        def update_worker_progress(worker_name: str, target: str, status: str):
+            nonlocal completed_tasks
+            
+            if status == "running":
+                progress["workers"][worker_name]["status"] = "running"
+                progress["workers"][worker_name]["progress"] = 50
+            elif status in ["done", "failed"]:
+                completed_tasks += 1
+                progress["workers"][worker_name]["status"] = status
+                progress["workers"][worker_name]["progress"] = 100
+                progress["completed_tasks"] = completed_tasks
+                progress["overall"] = int((completed_tasks / total_tasks) * 100)
+            
             save_scan_status(scan_id, "running", progress)
+            logger.info(f"[{scan_id}] Progress: {progress['overall']}% ({completed_tasks}/{total_tasks})")
         
-        # Run orchestrator
+        # Mark all workers as running initially
+        for worker in worker_names:
+            progress["workers"][worker]["status"] = "running"
+            progress["workers"][worker]["progress"] = 0
+        save_scan_status(scan_id, "running", progress)
+        
+        # Run orchestrator with progress tracking
         results = main_orchestrator.run_orchestrator(
             targets=targets,
             workers=workers,
-            max_target_workers=1
+            max_target_workers=1,
+            progress_callback=update_worker_progress
         )
         
-        # Mark all as done
+        # Mark all as done with 100% progress
+        progress["overall"] = 100
+        progress["completed_tasks"] = total_tasks
         for worker in worker_names:
-            progress[worker] = "done"
+            progress["workers"][worker]["status"] = "done"
+            progress["workers"][worker]["progress"] = 100
         
         # Save results
         result_file = SCANS_DIR / f"scan_{scan_id}.json"
@@ -136,7 +387,12 @@ def run_scan_background(scan_id: str, targets: List[str], worker_names: List[str
         
     except Exception as e:
         logger.exception(f"[{scan_id}] Scan failed: {e}")
-        save_scan_status(scan_id, "failed", {worker: "error" for worker in worker_names})
+        progress = {
+            "workers": {worker: {"status": "error", "progress": 0} for worker in worker_names},
+            "overall": 0,
+            "error": str(e)
+        }
+        save_scan_status(scan_id, "failed", progress)
         active_scans[scan_id]["status"] = "failed"
         active_scans[scan_id]["error"] = str(e)
 
@@ -223,7 +479,7 @@ async def get_scan_status(scan_id: str):
 @app.get("/api/scan/results/{scan_id}")
 async def get_scan_results(scan_id: str):
     """
-    Get the results of a completed scan.
+    Get the results of a completed scan with enriched vulnerability data.
     """
     result_file = SCANS_DIR / f"scan_{scan_id}.json"
     
@@ -236,20 +492,65 @@ async def get_scan_results(scan_id: str):
     with open(result_file, 'r') as f:
         results = json.load(f)
     
+    # Load enriched vulnerability data
+    vulnerabilities = load_enriched_data(scan_id)
+    
+    # Calculate risk summary
+    risk_summary = calculate_risk_summary(vulnerabilities)
+    
+    # Add enriched data to results
+    results['vulnerabilities'] = vulnerabilities
+    results['risk_summary'] = risk_summary
+    
     return results
+
+
+@app.get("/api/export/csv/{scan_id}")
+async def export_csv(scan_id: str):
+    """
+    Export scan results as CSV file.
+    """
+    result_file = SCANS_DIR / f"scan_{scan_id}.json"
+    
+    if not result_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scan {scan_id} not found"
+        )
+    
+    try:
+        csv_path = generate_csv_from_scan(scan_id)
+        
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate CSV file"
+            )
+        
+        return FileResponse(
+            path=csv_path,
+            filename=f"scan_{scan_id}_results.csv",
+            media_type="text/csv"
+        )
+    except Exception as e:
+        logger.exception(f"Error exporting CSV for scan {scan_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to export CSV: {str(e)}"
+        )
 
 
 @app.get("/api/scans/history")
 async def get_scan_history():
     """
-    Get a list of all previous scans.
+    Get a list of all previous scans with risk summaries.
     """
     history = []
     
     # Look for all scan result files
     for result_file in SCANS_DIR.glob("scan_*.json"):
-        # Skip status files
-        if "_status" in result_file.name:
+        # Skip status files and CSV result files
+        if "_status" in result_file.name or "_results" in result_file.name:
             continue
         
         try:
@@ -267,10 +568,19 @@ async def get_scan_history():
                 # Get status
                 status_file = SCANS_DIR / f"scan_{scan_id}_status.json"
                 status = "completed"
+                workers_used = []
                 if status_file.exists():
                     with open(status_file, 'r') as sf:
                         status_data = json.load(sf)
                         status = status_data.get("status", "completed")
+                        # Extract workers from progress data
+                        progress = status_data.get("progress", {})
+                        if isinstance(progress, dict) and "workers" in progress:
+                            workers_used = list(progress["workers"].keys())
+                
+                # Load vulnerability data and calculate risk summary
+                vulnerabilities = load_enriched_data(scan_id)
+                risk_summary = calculate_risk_summary(vulnerabilities)
                 
                 history.append({
                     "scan_id": scan_id,
@@ -278,7 +588,9 @@ async def get_scan_history():
                     "targets": targets,
                     "status": status,
                     "timestamp": data.get("scan_timestamp", "unknown"),
-                    "total_targets": data.get("total_targets", len(targets))
+                    "total_targets": data.get("total_targets", len(targets)),
+                    "workers": workers_used if workers_used else ["nmap", "nikto", "nuclei"],
+                    "risk_summary": risk_summary
                 })
         except Exception as e:
             logger.exception(f"Error reading scan file {result_file}: {e}")
@@ -286,6 +598,9 @@ async def get_scan_history():
     
     # Sort by timestamp (newest first)
     history.sort(key=lambda x: x["timestamp"], reverse=True)
+    
+    # Update session history manifest
+    update_session_history(history)
     
     return history
 

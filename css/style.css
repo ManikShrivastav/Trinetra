@@ -852,12 +852,170 @@ body.mode-2 {
   overflow: hidden;
   transition: var(--transition);
   box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
 }
 
 .scan-card:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
   border-color: var(--accent-primary);
+}
+
+.scan-info h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.scan-date {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.scan-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.scan-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.summary-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-count {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-item.critical .stat-count {
+  color: var(--critical);
+}
+
+.stat-item.high .stat-count {
+  color: var(--danger);
+}
+
+.stat-item.medium .stat-count {
+  color: var(--warning);
+}
+
+.stat-item.low .stat-count {
+  color: var(--success);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cvss-average {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.scan-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.scan-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.download-csv {
+  background-color: var(--accent-light);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.download-csv:hover {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+.risk-summary-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.risk-summary-section h4 {
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.worker-results {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.worker-result {
+  padding: 12px;
+  border-radius: 6px;
+  background-color: var(--bg-tertiary);
+  border-left: 4px solid;
+}
+
+.worker-result.success {
+  border-left-color: var(--success);
+}
+
+.worker-result.error {
+  border-left-color: var(--danger);
+}
+
+.worker-result code {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
 }
 
 .scan-card-header {
@@ -1036,6 +1194,67 @@ body.mode-2 {
 .vuln-description {
   margin-top: 8px;
   line-height: 1.6;
+}
+
+.vuln-recommendation {
+  margin-top: 8px;
+  padding: 8px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.vuln-timestamp {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cvss-scores {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cvss-badge {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: var(--accent-light);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+}
+
+.severity-badge.low {
+  background-color: var(--success);
+  color: white;
+}
+
+.csv-download-section {
+  margin-top: 24px;
+  padding: 16px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.csv-download-section button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.no-vulnerabilities {
+  padding: 32px;
+  text-align: center;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.no-vulnerabilities p {
+  margin-bottom: 8px;
 }
 
 .chat-container {

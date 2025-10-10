@@ -154,7 +154,11 @@ async function updateStatus() {
 
 function renderProgress(progress) {
   const progressElements = document.querySelectorAll('.scanner-progress');
-  const workers = ['nmap', 'nikto', 'nuclei'];
+  const workers = ['nmap', 'nuclei', 'nikto'];
+  
+  // Handle new progress structure with workers object
+  const workersData = progress.workers || {};
+  const overallProgress = progress.overall || 0;
   
   workers.forEach((worker, index) => {
     if (index >= progressElements.length) return;
@@ -164,32 +168,54 @@ function renderProgress(progress) {
     const status = element.querySelector('.progress-status');
     const spinner = element.querySelector('.spinner');
     
-    const workerStatus = progress[worker] || 'queued';
+    // Get worker status from new structure
+    const workerData = workersData[worker] || {};
+    const workerStatus = workerData.status || 'queued';
+    const workerProgress = workerData.progress || 0;
     
     switch (workerStatus) {
       case 'queued':
         progressBar.style.width = '0%';
         status.textContent = 'Queued';
         spinner.style.display = 'block';
+        progressBar.style.backgroundColor = '';
         break;
       case 'running':
-        progressBar.style.width = '50%';
+        progressBar.style.width = `${workerProgress}%`;
         status.textContent = 'Scanning...';
         spinner.style.display = 'block';
+        progressBar.style.backgroundColor = '';
         break;
       case 'done':
         progressBar.style.width = '100%';
         status.textContent = 'Completed';
         spinner.style.display = 'none';
+        progressBar.style.backgroundColor = '#2ecc71';
         break;
+      case 'failed':
       case 'error':
         progressBar.style.width = '100%';
         status.textContent = 'Failed';
         spinner.style.display = 'none';
         progressBar.style.backgroundColor = '#e74c3c';
         break;
+      default:
+        // Fallback for old progress format
+        if (workerStatus === 'done') {
+          progressBar.style.width = '100%';
+          status.textContent = 'Completed';
+          spinner.style.display = 'none';
+          progressBar.style.backgroundColor = '#2ecc71';
+        } else {
+          progressBar.style.width = '50%';
+          status.textContent = 'Scanning...';
+          spinner.style.display = 'block';
+        }
     }
   });
+  
+  // Log overall progress for debugging
+  console.log(`Overall progress: ${overallProgress}%`);
 }
 
 async function fetchResults() {
@@ -220,83 +246,100 @@ function showResults(scanData) {
   const targets = scanData.results.map(r => r.target).join(', ');
   document.getElementById('resultTarget').textContent = targets;
 
-  // Count vulnerabilities from results
-  // This is a simplified version - you may want to parse actual scan outputs
-  let criticalCount = 0;
-  let highCount = 0;
-  let mediumCount = 0;
-  let lowCount = 0;
+  // Get vulnerabilities and risk summary from enriched data
+  const vulnerabilities = scanData.vulnerabilities || [];
+  const riskSummary = scanData.risk_summary || {
+    critical_count: 0,
+    high_count: 0,
+    medium_count: 0,
+    low_count: 0
+  };
   
-  const vulnerabilities = [];
-  
-  // Parse results from each target
-  scanData.results.forEach(targetResult => {
-    const target = targetResult.target;
-    
-    // Check each worker's results
-    Object.entries(targetResult.results).forEach(([worker, result]) => {
-      if (result.ok && result.output) {
-        // For demonstration, add mock vulnerabilities
-        // In a real implementation, you'd parse the actual scan output files
-        if (worker === 'nmap') {
-          highCount += Math.floor(Math.random() * 5) + 1;
-          mediumCount += Math.floor(Math.random() * 10) + 5;
-          vulnerabilities.push({
-            severity: 'high',
-            title: `Open Ports Detected - ${target}`,
-            scanner: 'Nmap',
-            description: `Scan output: ${result.output}`
-          });
-        } else if (worker === 'nikto') {
-          criticalCount += Math.floor(Math.random() * 3);
-          highCount += Math.floor(Math.random() * 5) + 2;
-          vulnerabilities.push({
-            severity: 'critical',
-            title: `Web Vulnerabilities Found - ${target}`,
-            scanner: 'Nikto',
-            description: `Scan output: ${result.output}`
-          });
-        } else if (worker === 'nuclei') {
-          mediumCount += Math.floor(Math.random() * 15) + 5;
-          lowCount += Math.floor(Math.random() * 20) + 10;
-          vulnerabilities.push({
-            severity: 'medium',
-            title: `Template Matches - ${target}`,
-            scanner: 'Nuclei',
-            description: `Scan output: ${result.output}`
-          });
-        }
-      } else if (!result.ok) {
-        // Scanner failed
-        vulnerabilities.push({
-          severity: 'low',
-          title: `${worker} scan failed for ${target}`,
-          scanner: worker,
-          description: result.error || 'Unknown error'
-        });
-      }
-    });
-  });
+  // Update counts with risk summary data
+  document.getElementById('criticalCount').textContent = riskSummary.critical_count;
+  document.getElementById('highCount').textContent = riskSummary.high_count;
+  document.getElementById('mediumCount').textContent = riskSummary.medium_count;
+  document.getElementById('lowCount').textContent = riskSummary.low_count;
 
-  // Update counts
-  document.getElementById('criticalCount').textContent = criticalCount;
-  document.getElementById('highCount').textContent = highCount;
-  document.getElementById('mediumCount').textContent = mediumCount;
-  document.getElementById('lowCount').textContent = lowCount;
-
-  // Render vulnerabilities list
+  // Render vulnerabilities list with enriched data
   const vulnerabilitiesList = document.getElementById('vulnerabilitiesList');
   if (vulnerabilities.length > 0) {
-    vulnerabilitiesList.innerHTML = vulnerabilities.map(vuln => `
-      <div class="vulnerability-item ${vuln.severity}-item">
-        <div class="vuln-header">
-          <strong>${vuln.title}</strong>
-          <span class="severity-badge ${vuln.severity}">${vuln.severity.toUpperCase()}</span>
+    vulnerabilitiesList.innerHTML = vulnerabilities.map(vuln => {
+      const severityClass = vuln.severity ? vuln.severity.toLowerCase() : 'low';
+      const severityBadge = vuln.severity ? vuln.severity.toUpperCase() : 'UNKNOWN';
+      
+      return `
+        <div class="vulnerability-item ${severityClass}-item">
+          <div class="vuln-header">
+            <div>
+              <strong>${vuln.cve_id || 'Unknown CVE'}</strong>
+              <span class="severity-badge ${severityClass}">${severityBadge}</span>
+            </div>
+            <div class="cvss-scores">
+              ${vuln.cvss_v3 && vuln.cvss_v3 !== 'N/A' ? `<span class="cvss-badge">CVSS v3: ${vuln.cvss_v3}</span>` : ''}
+              ${vuln.cvss_v2 && vuln.cvss_v2 !== 'N/A' ? `<span class="cvss-badge">CVSS v2: ${vuln.cvss_v2}</span>` : ''}
+            </div>
+          </div>
+          <p><strong>Source:</strong> ${vuln.source_tool || 'Unknown'} | <strong>Target:</strong> ${vuln.target || 'N/A'}</p>
+          <p class="vuln-description"><strong>Description:</strong> ${vuln.description || 'No description available'}</p>
+          <p class="vuln-recommendation"><strong>Recommendation:</strong> ${vuln.recommendation || 'See NVD for details'}</p>
+          <p class="vuln-timestamp"><small>Detected: ${vuln.timestamp || 'N/A'}</small></p>
         </div>
-        <p>Detected by: ${vuln.scanner}</p>
-        <p class="vuln-description">${vuln.description}</p>
+      `;
+    }).join('');
+    
+    // Add CSV download button if vulnerabilities exist
+    const downloadSection = document.createElement('div');
+    downloadSection.className = 'csv-download-section';
+    downloadSection.innerHTML = `
+      <button id="downloadCsvBtn" class="btn-primary">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        Download CSV Report
+      </button>
+    `;
+    vulnerabilitiesList.insertAdjacentElement('afterend', downloadSection);
+    
+    // Add event listener for CSV download
+    document.getElementById('downloadCsvBtn').addEventListener('click', () => {
+      downloadCsv(scanData.scan_id);
+    });
+  } else {
+    vulnerabilitiesList.innerHTML = `
+      <div class="no-vulnerabilities">
+        <p>No enriched vulnerabilities found in this scan.</p>
+        <p>Scan outputs may still contain useful information - check the raw scan files.</p>
       </div>
-    `).join('');
+    `;
+  }
+}
+
+async function downloadCsv(scanId) {
+  try {
+    const response = await fetch(`/api/export/csv/${scanId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to download CSV');
+    }
+    
+    // Create blob from response
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `scan_${scanId}_results.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    
+    console.log('CSV downloaded successfully');
+  } catch (error) {
+    console.error('Error downloading CSV:', error);
+    alert('Failed to download CSV: ' + error.message);
   }
 }
 
