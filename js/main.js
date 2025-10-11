@@ -101,11 +101,8 @@ if (profileBtn && dropdownMenu) {
 
 if (logoutBtn) {
   logoutBtn.addEventListener('click', () => {
-    localStorage.removeItem('isLoggedIn');
-    localStorage.removeItem('userEmail');
-    if (authButtons) authButtons.classList.remove('hidden');
-    if (profileSection) profileSection.classList.add('hidden');
-    if (dropdownMenu) dropdownMenu.classList.add('hidden');
+    // Use Auth module logout for proper JWT cleanup
+    Auth.logout(false);
   });
 }
 

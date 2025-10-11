@@ -1,0 +1,222 @@
+{
+  "last_updated": "2025-10-11T17:38:32Z",
+  "total_scans": 9,
+  "scans": [
+    {
+      "scan_id": "7ba7529d",
+      "target": "http://scanme.nmap.org/",
+      "targets": [
+        "http://scanme.nmap.org/"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-11T17:34:15Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "7988c4dc",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-11T17:07:57Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "76383017",
+      "target": "http://httpforever.com",
+      "targets": [
+        "http://httpforever.com"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-10T05:49:31Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "99df8fed",
+      "target": "http://httpforever.com",
+      "targets": [
+        "http://httpforever.com"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-10T05:04:05Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "818a4338",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-09T16:20:02Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "0d39ef23",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-09T16:16:26Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "1776ca0f",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-09T16:15:26Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "8efa7692",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-09T15:33:53Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    },
+    {
+      "scan_id": "078b09d0",
+      "target": "https://www.nmap.org",
+      "targets": [
+        "https://www.nmap.org"
+      ],
+      "status": "completed",
+      "timestamp": "2025-10-09T09:47:34Z",
+      "total_targets": 1,
+      "workers": [
+        "nmap",
+        "nikto",
+        "nuclei"
+      ],
+      "risk_summary": {
+        "total_vulnerabilities": 0,
+        "critical_count": 0,
+        "high_count": 0,
+        "medium_count": 0,
+        "low_count": 0,
+        "highest_severity": "none",
+        "average_cvss": 0.0
+      }
+    }
+  ]
+}

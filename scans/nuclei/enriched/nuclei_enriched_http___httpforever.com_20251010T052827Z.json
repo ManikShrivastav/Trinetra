@@ -1,0 +1,9 @@
+{
+  "scanner": "nuclei",
+  "target": "http://httpforever.com",
+  "timestamp": "20251010T052827Z",
+  "scan_output": "scans/nuclei/nuclei_http___httpforever.com_20251010T052827Z.jsonl",
+  "total_findings": 0,
+  "total_cves": 0,
+  "findings": []
+}

@@ -75,23 +75,15 @@ scanForm.addEventListener('submit', async (e) => {
 
 async function startScan(targets) {
   try {
-    const response = await fetch('/api/scan/start', {
+    // Use authenticated fetch from Auth module
+    const data = await Auth.authenticatedFetch('/api/scan/start', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: JSON.stringify({
         targets: targets,
         workers: ['nmap', 'nikto', 'nuclei']
       })
     });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || 'Failed to start scan');
-    }
-
-    const data = await response.json();
     currentScanId = data.scan_id;
     
     console.log('Scan started:', data);
@@ -111,13 +103,11 @@ async function updateStatus() {
   if (!currentScanId) return;
 
   try {
-    const response = await fetch(`/api/scan/status/${currentScanId}`);
+    // Use authenticated fetch from Auth module
+    const data = await Auth.authenticatedFetch(`/api/scan/status/${currentScanId}`, {
+      method: 'GET'
+    });
     
-    if (!response.ok) {
-      throw new Error('Failed to fetch scan status');
-    }
-
-    const data = await response.json();
     console.log('Scan status:', data);
     
     // Update progress UI
@@ -222,13 +212,11 @@ async function fetchResults() {
   if (!currentScanId) return;
 
   try {
-    const response = await fetch(`/api/scan/results/${currentScanId}`);
+    // Use authenticated fetch from Auth module
+    const data = await Auth.authenticatedFetch(`/api/scan/results/${currentScanId}`, {
+      method: 'GET'
+    });
     
-    if (!response.ok) {
-      throw new Error('Failed to fetch scan results');
-    }
-
-    const data = await response.json();
     console.log('Scan results:', data);
     
     showResults(data);

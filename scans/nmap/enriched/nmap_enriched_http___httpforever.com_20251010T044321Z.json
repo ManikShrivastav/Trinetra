@@ -1,0 +1,9 @@
+{
+  "scanner": "nmap",
+  "target": "http://httpforever.com",
+  "timestamp": "20251010T044321Z",
+  "scan_output": "scans/nmap/nmap_http___httpforever.com_20251010T044321Z.xml",
+  "total_hosts": 0,
+  "total_cves": 0,
+  "findings": []
+}

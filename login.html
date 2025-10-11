@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trinetra - Secure Login</title>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        /* Matrix Animation Background */
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background-color: #000000;
+        }
+
+        /* Login Container */
+        .login-container {
+            position: relative;
+            z-index: 10;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Login Card */
+        .login-card {
+            width: 100%;
+            max-width: 450px;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            padding: 40px;
+            transition: all 0.3s ease;
+        }
+
+        .login-card:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 255, 0.7);
+            border-color: rgba(0, 255, 255, 0.5);
+        }
+
+        /* Logo/Title */
+        .login-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-title {
+            font-size: 36px;
+            font-weight: 800;
+            color: #00ffff;
+            letter-spacing: 4px;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            margin-bottom: 10px;
+        }
+
+        .login-subtitle {
+            color: #9ca3af;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-label {
+            display: block;
+            color: #e4e7eb;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(30, 39, 56, 0.8);
+            border: 1px solid rgba(0, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #e4e7eb;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .form-input:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+            background: rgba(30, 39, 56, 1);
+        }
+
+        .form-input::placeholder {
+            color: #6b7280;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(30, 39, 56, 0.8);
+            border: 1px solid rgba(0, 255, 255, 0.25);
+            border-radius: 8px;
+            color: #e4e7eb;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2300FFFF'%3E%3Cpath d='M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 11.232 6.757 8 5.343 9.414z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 20px;
+            padding-right: 40px;
+        }
+
+        .form-select:focus {
+            border-color: #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
+            background-color: rgba(30, 39, 56, 1);
+        }
+
+        /* Error Message */
+        .error-message {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        /* Login Button */
+        .login-button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #00ffff 0%, #00cccc 100%);
+            border: none;
+            border-radius: 8px;
+            color: #000000;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.9);
+        }
+
+        .login-button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        .login-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.3);
+            border-top-color: #000000;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Footer Links */
+        .login-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .login-footer a {
+            color: #00ffff;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .login-footer a:hover {
+            color: #00cccc;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 30px 20px;
+            }
+
+            .login-title {
+                font-size: 28px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Matrix Animation Canvas -->
+    <canvas id="matrix-canvas"></canvas>
+
+    <!-- Login Container -->
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Header -->
+            <div class="login-header">
+                <h1 class="login-title">TRINETRA</h1>
+                <p class="login-subtitle">CENTRALIZED SECURITY ACCESS</p>
+            </div>
+
+            <!-- Error Message (Hidden by default) -->
+            <div id="error-message" class="error-message" style="display: none;"></div>
+
+            <!-- Login Form -->
+            <form id="login-form">
+                <!-- User ID -->
+                <div class="form-group">
+                    <label for="userid" class="form-label">USER ID</label>
+                    <input
+                        type="text"
+                        id="userid"
+                        name="userid"
+                        class="form-input"
+                        placeholder="Enter your user ID"
+                        value="admin_user"
+                        required
+                        autocomplete="username"
+                    />
+                </div>
+
+                <!-- Password -->
+                <div class="form-group">
+                    <label for="password" class="form-label">PASSWORD</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="form-input"
+                        placeholder="••••••••"
+                        value="password123"
+                        required
+                        autocomplete="current-password"
+                    />
+                </div>
+
+                <!-- Role -->
+                <div class="form-group">
+                    <label for="role" class="form-label">ROLE</label>
+                    <select id="role" name="role_id" class="form-select" required>
+                        <option value="1">Admin</option>
+                        <option value="2">User</option>
+                        <option value="3">Guest</option>
+                    </select>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" id="login-button" class="login-button">
+                    SECURE LOGIN
+                </button>
+            </form>
+
+            <!-- Footer -->
+            <div class="login-footer">
+                Need access? <a href="#register">Request credentials</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Authentication Script -->
+    <script src="js/auth.js"></script>
+    <script>
+        // Initialize Matrix Animation
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        // Matrix rain characters
+        const chars = '10101010101010101010101010101010';
+        const fontSize = 16;
+        const columns = canvas.width / fontSize;
+
+        // Initialize drops
+        const drops = [];
+        for (let i = 0; i < columns; i++) {
+            drops[i] = Math.random() * canvas.height / fontSize;
+        }
+
+        // Draw matrix rain
+        function drawMatrix() {
+            // Semi-transparent black to create trailing effect
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Matrix green/cyan color
+            ctx.fillStyle = '#00ff99';
+            ctx.font = `${fontSize}px monospace`;
+
+            for (let i = 0; i < drops.length; i++) {
+                // Random character
+                const text = chars.charAt(Math.floor(Math.random() * chars.length));
+
+                // Add flicker effect with random opacity
+                ctx.globalAlpha = 0.6 + Math.random() * 0.4;
+                ctx.fillText(text, i * fontSize, drops[i] * fontSize);
+                ctx.globalAlpha = 1.0;
+
+                // Reset drop to top with random chance
+                if (drops[i] * fontSize > canvas.height && Math.random() > 0.985) {
+                    drops[i] = 0;
+                }
+
+                drops[i]++;
+            }
+        }
+
+        // Animate matrix rain
+        setInterval(drawMatrix, 50);
+
+        // Resize canvas on window resize
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Reinitialize drops
+            const newColumns = canvas.width / fontSize;
+            drops.length = Math.floor(newColumns);
+            for (let i = 0; i < drops.length; i++) {
+                drops[i] = drops[i] || Math.random() * canvas.height / fontSize;
+            }
+        });
+
+        // Login Form Handler
+        const loginForm = document.getElementById('login-form');
+        const loginButton = document.getElementById('login-button');
+        const errorMessage = document.getElementById('error-message');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Get form data
+            const formData = {
+                userid: document.getElementById('userid').value,
+                password: document.getElementById('password').value,
+                role_id: parseInt(document.getElementById('role').value)
+            };
+
+            // Show loading state
+            loginButton.disabled = true;
+            loginButton.innerHTML = '<span class="spinner"></span>ACCESSING...';
+            errorMessage.style.display = 'none';
+
+            try {
+                // Call login API
+                const response = await fetch('http://localhost:8000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Login failed');
+                }
+
+                // Store token and user info
+                Auth.setAuthToken(data.token, data.expires_in);
+                Auth.setUserInfo(data.user);
+
+                // Redirect to dashboard at /index
+                window.location.href = '/index';
+
+            } catch (error) {
+                console.error('Login error:', error);
+                errorMessage.textContent = error.message || 'Authentication failed. Please check your credentials.';
+                errorMessage.style.display = 'block';
+                
+                // Reset button
+                loginButton.disabled = false;
+                loginButton.innerHTML = 'SECURE LOGIN';
+            }
+        });
+
+        // Check if already logged in
+        if (Auth.isAuthenticated()) {
+            window.location.href = '/index';
+        }
+    </script>
+</body>
+</html>

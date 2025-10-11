@@ -1,0 +1,28 @@
+{
+  "scan_id": "818a4338",
+  "scan_timestamp": "2025-10-09T16:20:02Z",
+  "total_targets": 1,
+  "results": [
+    {
+      "target": "https://www.nmap.org",
+      "timestamp": "20251009T161906Z",
+      "results": {
+        "nmap": {
+          "output": "scans/nmap/nmap_https___www.nmap.org_20251009T161906Z.xml",
+          "ok": true,
+          "error": null
+        },
+        "nikto": {
+          "output": null,
+          "ok": false,
+          "error": "Nikto did not create output file"
+        },
+        "nuclei": {
+          "output": "scans/nuclei/nuclei_https___www.nmap.org_20251009T161906Z.jsonl",
+          "ok": true,
+          "error": null
+        }
+      }
+    }
+  ]
+}

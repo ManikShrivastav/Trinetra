@@ -13,13 +13,18 @@ from pathlib import Path
 from threading import Thread
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Request, Cookie
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
 # Import orchestrator functions
 import main_orchestrator
+
+# Import authentication module
+from data_base import auth_db
 
 # Configure logging
 logging.basicConfig(
@@ -32,12 +37,37 @@ logger.propagate = False
 # Initialize FastAPI app
 app = FastAPI(title="Trinetra Security Scanner API", version="1.0.0")
 
+# Configure CORS to allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Security scheme for JWT Bearer tokens
+security = HTTPBearer()
+
 # Global scan tracking
 active_scans: Dict[str, Dict] = {}
 SCANS_DIR = Path("scans")
 SCANS_DIR.mkdir(exist_ok=True)
 
 # Request models
+class LoginRequest(BaseModel):
+    userid: str
+    password: str
+    role_id: int
+
+
+class LoginResponse(BaseModel):
+    token: str
+    expires_in: int
+    token_type: str
+    user: Dict
+
+
 class ScanRequest(BaseModel):
     targets: List[str]
     workers: List[str] = ["nmap", "nikto", "nuclei"]
@@ -60,6 +90,67 @@ class ScanStartResponse(BaseModel):
 def utc_timestamp():
     """Return UTC timestamp string."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+async def verify_token_dependency(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Dependency to verify JWT token for protected routes.
+    Extracts token from Authorization header and validates it.
+    
+    Args:
+        credentials: HTTP Authorization credentials
+    
+    Returns:
+        Token payload if valid
+    
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    token = credentials.credentials
+    
+    # Verify token using auth_db module
+    payload = auth_db.verify_token(token)
+    
+    if not payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired authentication token"
+        )
+    
+    return payload
+
+
+async def check_auth_for_page(request: Request):
+    """
+    Check authentication for HTML page requests.
+    Looks for JWT token in Authorization header or localStorage (via query param).
+    
+    Returns:
+        bool: True if authenticated, False otherwise
+    """
+    # Try to get token from Authorization header
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.replace('Bearer ', '')
+        payload = auth_db.verify_token(token)
+        if payload:
+            return True
+    
+    # For HTML pages, we rely on client-side auth.js to check localStorage
+    # and redirect. But we can also check a cookie if set.
+    token_cookie = request.cookies.get('trinetra_auth_token')
+    if token_cookie:
+        try:
+            import json
+            token_data = json.loads(token_cookie)
+            token = token_data.get('token')
+            payload = auth_db.verify_token(token)
+            if payload:
+                return True
+        except:
+            pass
+    
+    return False
 
 
 def calculate_severity(cvss_score: float) -> str:
@@ -397,11 +488,121 @@ def run_scan_background(scan_id: str, targets: List[str], worker_names: List[str
         active_scans[scan_id]["error"] = str(e)
 
 
-# API Routes
-@app.post("/api/scan/start", response_model=ScanStartResponse)
-async def start_scan(request: ScanRequest):
+# ============================================================================
+# AUTHENTICATION ROUTES
+# ============================================================================
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def login(request: LoginRequest):
     """
-    Start a new security scan.
+    Authenticate user and return JWT token.
+    
+    Request body:
+        - userid: User ID (e.g., "admin_user", "test_user")
+        - password: User password
+        - role_id: Role ID (1=Admin, 2=User, 3=Guest)
+    
+    Returns:
+        JWT token with 1-hour expiry and user information
+    
+    Mock Users:
+        - admin_user / password123 / Role: Admin (role_id=1)
+        - test_user / password123 / Role: User (role_id=2)
+        - guest_user / guest123 / Role: Guest (role_id=3)
+    """
+    logger.info(f"Login attempt for user: {request.userid}")
+    
+    # Authenticate user
+    user = auth_db.authenticate_user(
+        userid=request.userid,
+        password=request.password,
+        role_id=request.role_id
+    )
+    
+    if not user:
+        logger.warning(f"Failed login attempt for user: {request.userid}")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials or role mismatch"
+        )
+    
+    # Create JWT token
+    token_data = auth_db.create_access_token(user)
+    
+    logger.info(f"Successful login for user: {request.userid} (role: {user['role']})")
+    
+    return LoginResponse(**token_data)
+
+
+@app.post("/api/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Logout user by blacklisting their JWT token.
+    
+    Note: With JWT, logout is primarily handled client-side by deleting the token.
+    This endpoint adds the token to a blacklist to prevent reuse (optional).
+    In production, use Redis with TTL equal to token expiry for efficient blacklisting.
+    """
+    token = credentials.credentials
+    
+    # Add token to blacklist
+    auth_db.blacklist_token(token)
+    
+    logger.info("User logged out successfully")
+    
+    return {"message": "Logout successful"}
+
+
+@app.get("/api/auth/verify")
+async def verify_token(payload: Dict = Depends(verify_token_dependency)):
+    """
+    Verify JWT token validity.
+    Protected route that returns user info if token is valid.
+    
+    Used by frontend to:
+    - Check if user is still authenticated on page load
+    - Validate token before making protected API calls
+    - Get current user information
+    """
+    return {
+        "valid": True,
+        "user": {
+            "userid": payload.get("userid"),
+            "role": payload.get("role"),
+            "role_id": payload.get("role_id")
+        }
+    }
+
+
+@app.get("/api/dashboard")
+async def get_dashboard(payload: Dict = Depends(verify_token_dependency)):
+    """
+    Protected dashboard endpoint.
+    Returns dashboard data only if valid JWT token is provided.
+    
+    This demonstrates a protected route that requires authentication.
+    """
+    return {
+        "message": "Access granted to secure dashboard",
+        "user": {
+            "userid": payload.get("userid"),
+            "role": payload.get("role"),
+            "role_id": payload.get("role_id"),
+            "token_issued_at": datetime.fromtimestamp(payload.get("iat").timestamp()).isoformat()
+        },
+        "system_status": "operational",
+        "timestamp": utc_timestamp()
+    }
+
+
+# ============================================================================
+# SCAN API ROUTES (Protected with JWT Authentication)
+# ============================================================================
+
+@app.post("/api/scan/start", response_model=ScanStartResponse)
+async def start_scan(request: ScanRequest, payload: Dict = Depends(verify_token_dependency)):
+    """
+    Start a new security scan (Protected Route - Requires JWT).
     Returns a scan_id that can be used to track progress.
     """
     if not request.targets:
@@ -451,9 +652,9 @@ async def start_scan(request: ScanRequest):
 
 
 @app.get("/api/scan/status/{scan_id}")
-async def get_scan_status(scan_id: str):
+async def get_scan_status(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
     """
-    Get the current status of a scan.
+    Get the current status of a scan (Protected Route - Requires JWT).
     """
     # Check in-memory first
     if scan_id in active_scans:
@@ -477,9 +678,9 @@ async def get_scan_status(scan_id: str):
 
 
 @app.get("/api/scan/results/{scan_id}")
-async def get_scan_results(scan_id: str):
+async def get_scan_results(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
     """
-    Get the results of a completed scan with enriched vulnerability data.
+    Get the results of a completed scan with enriched vulnerability data (Protected Route - Requires JWT).
     """
     result_file = SCANS_DIR / f"scan_{scan_id}.json"
     
@@ -506,9 +707,9 @@ async def get_scan_results(scan_id: str):
 
 
 @app.get("/api/export/csv/{scan_id}")
-async def export_csv(scan_id: str):
+async def export_csv(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
     """
-    Export scan results as CSV file.
+    Export scan results as CSV file (Protected Route - Requires JWT).
     """
     result_file = SCANS_DIR / f"scan_{scan_id}.json"
     
@@ -541,9 +742,9 @@ async def export_csv(scan_id: str):
 
 
 @app.get("/api/scans/history")
-async def get_scan_history():
+async def get_scan_history(payload: Dict = Depends(verify_token_dependency)):
     """
-    Get a list of all previous scans with risk summaries.
+    Get a list of all previous scans with risk summaries (Protected Route - Requires JWT).
     """
     history = []
     
@@ -606,9 +807,9 @@ async def get_scan_history():
 
 
 @app.get("/api/system/info")
-async def get_system_info():
+async def get_system_info(payload: Dict = Depends(verify_token_dependency)):
     """
-    Get system information and available workers.
+    Get system information and available workers (Protected Route - Requires JWT).
     """
     # Get last scan time
     last_scan_time = None
@@ -634,22 +835,68 @@ app.mount("/js", StaticFiles(directory="js"), name="js")
 
 # Serve HTML pages
 @app.get("/")
-async def serve_index():
+async def serve_index(request: Request):
+    """
+    Serve dashboard/index page.
+    Client-side auth.js will check localStorage for valid JWT and redirect if needed.
+    """
     return FileResponse("index.html")
 
 
+@app.get("/index")
+async def serve_index_route(request: Request):
+    """
+    Serve dashboard at /index route.
+    Redirect to login if no valid token in cookies.
+    """
+    return FileResponse("index.html")
+
+
+@app.get("/index.html")
+async def serve_index_html(request: Request):
+    """
+    Serve dashboard at /index.html route.
+    Client-side auth.js will check localStorage for valid JWT and redirect if needed.
+    """
+    return FileResponse("index.html")
+
+
+@app.get("/login")
+async def serve_login_route():
+    """Serve login page at /login route."""
+    return FileResponse("login.html")
+
+
+@app.get("/login.html")
+async def serve_login():
+    """Serve login page at /login.html route."""
+    return FileResponse("login.html")
+
+
 @app.get("/scan.html")
-async def serve_scan():
+async def serve_scan(request: Request):
+    """
+    Serve scan page (protected).
+    Client-side auth.js will check localStorage for valid JWT and redirect if needed.
+    """
     return FileResponse("scan.html")
 
 
 @app.get("/past-scans.html")
-async def serve_past_scans():
+async def serve_past_scans(request: Request):
+    """
+    Serve past scans page (protected).
+    Client-side auth.js will check localStorage for valid JWT and redirect if needed.
+    """
     return FileResponse("past-scans.html")
 
 
 @app.get("/bot.html")
-async def serve_bot():
+async def serve_bot(request: Request):
+    """
+    Serve bot page (protected).
+    Client-side auth.js will check localStorage for valid JWT and redirect if needed.
+    """
     return FileResponse("bot.html")
 
 

@@ -28,7 +28,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NIKTO_TIMEOUT = 3600
+NIKTO_TIMEOUT = 300
 NIKTO_TUNING = "0123456789abc"
 
 

@@ -160,8 +160,16 @@
         </div>
     </div>
 
+    <!-- Load Authentication Module First -->
+    <script src="js/auth.js"></script>
+    <script>
+        // Require authentication before loading page
+        Auth.requireAuth();
+        
+        // Update navbar with user info
+        Auth.updateNavbarProfile();
+    </script>
     <script src="js/past-scans.js"></script>
-    <script src="js/main.js"></script>
     <script src="js/main.js"></script>
 </body>
 </html>

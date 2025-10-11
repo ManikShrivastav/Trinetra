@@ -1,0 +1,10 @@
+{
+  "scan_id": "818a4338",
+  "status": "completed",
+  "progress": {
+    "nmap": "done",
+    "nikto": "done",
+    "nuclei": "done"
+  },
+  "updated_at": "2025-10-09T16:20:02Z"
+}

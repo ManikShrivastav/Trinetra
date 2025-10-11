@@ -27,7 +27,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NUCLEI_TIMEOUT = 3600
+NUCLEI_TIMEOUT = 300
 
 
 def safe_filename(s):

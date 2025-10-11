@@ -1,0 +1,9 @@
+{
+  "scanner": "nmap",
+  "target": "http://scanme.nmap.org/",
+  "timestamp": "20251011T171001Z",
+  "scan_output": "scans/nmap/nmap_http___scanme.nmap.org__20251011T171001Z.xml",
+  "total_hosts": 0,
+  "total_cves": 0,
+  "findings": []
+}

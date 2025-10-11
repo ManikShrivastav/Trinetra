@@ -27,7 +27,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NMAP_TIMEOUT = 3600
+NMAP_TIMEOUT = 300
 
 
 def safe_filename(s):

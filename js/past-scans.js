@@ -19,12 +19,11 @@ let currentScanDetails = null;
 
 async function loadScanHistory() {
   try {
-    const response = await fetch('/api/scans/history');
-    if (!response.ok) {
-      throw new Error('Failed to load scan history');
-    }
+    // Use authenticated fetch from Auth module
+    allScans = await Auth.authenticatedFetch('/api/scans/history', {
+      method: 'GET'
+    });
     
-    allScans = await response.json();
     console.log('Loaded scan history:', allScans);
     renderScanHistory(allScans);
   } catch (error) {
@@ -140,11 +139,10 @@ function attachDownloadCsvListeners() {
 
 async function downloadCsv(scanId) {
   try {
-    const response = await fetch(`/api/export/csv/${scanId}`);
-    
-    if (!response.ok) {
-      throw new Error('Failed to download CSV');
-    }
+    // Use authenticated fetch from Auth module (returns Response object for file downloads)
+    const response = await Auth.authenticatedFetch(`/api/export/csv/${scanId}`, {
+      method: 'GET'
+    });
     
     // Create blob from response
     const blob = await response.blob();
@@ -176,12 +174,11 @@ function attachViewDetailsListeners() {
 
 async function loadScanDetails(scanId) {
   try {
-    const response = await fetch(`/api/scan/results/${scanId}`);
-    if (!response.ok) {
-      throw new Error('Failed to load scan details');
-    }
+    // Use authenticated fetch from Auth module
+    const scanDetails = await Auth.authenticatedFetch(`/api/scan/results/${scanId}`, {
+      method: 'GET'
+    });
     
-    const scanDetails = await response.json();
     displayScanDetails(scanDetails);
   } catch (error) {
     console.error('Error loading scan details:', error);
