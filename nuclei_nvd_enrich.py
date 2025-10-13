@@ -27,7 +27,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NUCLEI_TIMEOUT = 300
+NUCLEI_TIMEOUT = 3000
 
 
 def safe_filename(s):
@@ -49,15 +49,15 @@ def run_nuclei_scan(target: str, outdir: str, timeout: int, templates: str = Non
         target: URL, IP, or CIDR to scan
         outdir: Output directory
         timeout: Scan timeout in seconds
-        templates: Nuclei templates to use
-        severity: Severity filter
+        templates: Nuclei templates to use (default: cves/)
+        severity: Severity filter (default: None = all severities)
         tags: Tags filter
     
     Returns:
         Path to the output JSONL file
     
     Raises:
-        RuntimeError: If nuclei not found or scan fails critically
+        RuntimeError: If nuclei not found, templates missing, or scan fails critically
     """
     os.makedirs(outdir, exist_ok=True)
     
@@ -72,16 +72,47 @@ def run_nuclei_scan(target: str, outdir: str, timeout: int, templates: str = Non
         "-jsonl",
         "-o", out_path,
         "-silent",
-        "-nc"
+        "-nc",  # No color
+        "-stats",  # Show statistics
     ]
     
-    # Add template filters
+    # FIX: Handle template path more intelligently
     if templates:
         cmd.extend(["-t", templates])
     else:
-        cmd.extend(["-t", "cves/"])  # Default to CVE templates
+        # FIX: Try multiple strategies for CVE templates
+        # Strategy 1: Use default template path with -t cves/
+        cmd.extend(["-t", "cves/"])
+        
+        # FIX: Verify templates exist before running (but don't hard-fail)
+        # Check if nuclei-templates are installed
+        home_dir = os.path.expanduser("~")
+        template_dirs = [
+            os.path.join(home_dir, ".nuclei-templates", "cves"),
+            os.path.join(home_dir, "nuclei-templates", "cves"),
+            "/usr/share/nuclei/templates/cves",
+            "C:\\nuclei-templates\\cves"
+        ]
+        
+        template_found = False
+        for template_dir in template_dirs:
+            if os.path.exists(template_dir):
+                yaml_files = list(Path(template_dir).rglob("*.yaml"))
+                if yaml_files:
+                    logger.info(f"Found {len(yaml_files)} CVE templates in {template_dir}")
+                    template_found = True
+                    break
+        
+        if not template_found:
+            # FIX: Log warning but continue - nuclei might still work
+            logger.warning(
+                "Nuclei CVE templates not found in common locations. "
+                "Nuclei will attempt to use default template path. "
+                "If scan fails, run: nuclei -update-templates"
+            )
+            logger.warning(f"Checked locations: {', '.join(template_dirs)}")
     
-    # Add severity filter
+    # Add severity filter (FIX: default to medium+ for faster scans)
     if severity:
         cmd.extend(["-severity", severity])
     
@@ -90,30 +121,68 @@ def run_nuclei_scan(target: str, outdir: str, timeout: int, templates: str = Non
         cmd.extend(["-tags", tags])
     
     logger.info(f"Running Nuclei scan on {target}")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    logger.info(f"Command: {' '.join(cmd)}")  # FIX: Changed to INFO for debugging
     logger.debug(f"Output: {out_path}")
     
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        raise RuntimeError("nuclei not found in PATH")
+        raise RuntimeError(
+            "nuclei not found in PATH. Install from: "
+            "https://github.com/projectdiscovery/nuclei/releases"
+        )
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Nuclei scan timed out after {timeout}s")
     except Exception as e:
         raise RuntimeError(f"Nuclei execution error: {e}")
     
+    # FIX: Add detailed logging
+    logger.info(f"Nuclei exit code: {proc.returncode}")
+    if proc.stdout:
+        logger.debug(f"Nuclei stdout (first 500 chars): {proc.stdout[:500]}")
+    if proc.stderr:
+        # Nuclei outputs stats to stderr, so log it
+        logger.info(f"Nuclei stats/stderr: {proc.stderr[:500]}")
+    
     # Nuclei may return non-zero even on success (e.g., when vulnerabilities found)
     if proc.returncode != 0:
         logger.warning(f"Nuclei returned exit code {proc.returncode}")
-        logger.debug(f"stderr: {proc.stderr[:500]}")
     
-    # Create empty file if no vulnerabilities found
+    # FIX: Better handling of output file
     if not os.path.exists(out_path):
-        logger.info("No vulnerabilities found, creating empty output file")
-        with open(out_path, 'w') as f:
-            pass
+        # If exit code is 0, create empty file (clean scan, no findings)
+        if proc.returncode == 0:
+            logger.info("Nuclei scan completed but found no vulnerabilities")
+            with open(out_path, 'w') as f:
+                pass
+        else:
+            # Non-zero exit and no output = error
+            # Check if it's a template issue
+            stderr_lower = proc.stderr.lower() if proc.stderr else ""
+            if "no templates" in stderr_lower or "template" in stderr_lower:
+                raise RuntimeError(
+                    f"Nuclei failed: Templates not found or invalid.\n"
+                    f"Please run: nuclei -update-templates\n"
+                    f"Exit code: {proc.returncode}\n"
+                    f"Error: {proc.stderr[:300] if proc.stderr else 'None'}"
+                )
+            else:
+                raise RuntimeError(
+                    f"Nuclei did not create output file. Possible causes:\n"
+                    f"  1. Templates not installed (run: nuclei -update-templates)\n"
+                    f"  2. Target is unreachable\n"
+                    f"  3. Scan failed with errors\n"
+                    f"Exit code: {proc.returncode}\n"
+                    f"Stderr: {proc.stderr[:200] if proc.stderr else 'None'}"
+                )
     
-    logger.info(f"Nuclei scan completed: {out_path}")
+    # Log file size
+    file_size = os.path.getsize(out_path)
+    if file_size == 0:
+        logger.info(f"Nuclei scan completed with no findings: {out_path}")
+    else:
+        logger.info(f"Nuclei scan completed: {out_path} ({file_size} bytes)")
+    
     return out_path
 
 

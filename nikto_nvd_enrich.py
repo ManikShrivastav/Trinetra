@@ -28,7 +28,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NIKTO_TIMEOUT = 300
+NIKTO_TIMEOUT = 5000
 NIKTO_TUNING = "0123456789abc"
 
 
@@ -63,6 +63,12 @@ def run_nikto_scan(target: str, outdir: str, timeout: int, tuning: str = None) -
     name = safe_filename(target)
     timestamp = utc_timestamp()
     
+    # FIX: Ensure target has protocol for Nikto
+    if not target.startswith(('http://', 'https://')):
+        # Default to http:// for Nikto (it's a web scanner)
+        target = f"http://{target}"
+        logger.info(f"Added http:// protocol to target: {target}")
+    
     # Try XML format first
     out_path = os.path.join(outdir, f"nikto_{name}_{timestamp}.xml")
     
@@ -79,24 +85,47 @@ def run_nikto_scan(target: str, outdir: str, timeout: int, tuning: str = None) -
     ]
     
     logger.info(f"Running Nikto scan on {target}")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    logger.info(f"Command: {' '.join(cmd)}")  # FIX: Changed to INFO for debugging
     logger.debug(f"Output: {out_path}")
     
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError:
-        raise RuntimeError("nikto not found in PATH")
+        raise RuntimeError("nikto not found in PATH. Install from https://github.com/sullo/nikto")
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Nikto scan timed out after {timeout}s")
     except Exception as e:
         raise RuntimeError(f"Nikto execution error: {e}")
     
-    # Nikto may return non-zero even on success
+    # FIX: Add detailed logging
+    logger.info(f"Nikto exit code: {proc.returncode}")
+    if proc.stdout:
+        logger.debug(f"Nikto stdout (first 500 chars): {proc.stdout[:500]}")
+    if proc.stderr:
+        logger.warning(f"Nikto stderr: {proc.stderr[:500]}")
+    
+    # FIX: Exit code -13 is SIGPIPE - usually means Nikto had issues with the target
+    # Exit code 0 = clean scan, non-zero can still have results
+    if proc.returncode == -13:
+        logger.warning(
+            f"Nikto exit code -13 (SIGPIPE) - possible causes:\n"
+            f"  - Target '{target}' is not a web server\n"
+            f"  - Target is unreachable or times out\n"
+            f"  - SSL/TLS handshake failure\n"
+            f"  - Try adding http:// or https:// explicitly\n"
+            f"  Continuing to check if any output was generated..."
+        )
+    
+    # Check if output exists despite error code (Nikto can still produce output)
+    if os.path.exists(out_path) and os.path.getsize(out_path) > 100:
+        logger.info(f"Nikto produced output despite exit code {proc.returncode}")
+        return out_path, "xml"
+    
+    # If XML failed, try txt format
     if proc.returncode != 0:
-        logger.warning(f"Nikto returned exit code {proc.returncode}")
-        logger.debug(f"stderr: {proc.stderr[:500]}")
+        logger.warning(f"Nikto returned exit code {proc.returncode} (may be normal)")
         
-        # Try txt format as fallback
+        # FIX: Try txt format as fallback
         logger.info("Trying txt format as fallback...")
         out_path_txt = os.path.join(outdir, f"nikto_{name}_{timestamp}.txt")
         cmd_txt = [
@@ -110,132 +139,128 @@ def run_nikto_scan(target: str, outdir: str, timeout: int, tuning: str = None) -
         
         try:
             proc2 = subprocess.run(cmd_txt, capture_output=True, text=True, timeout=timeout)
-            if os.path.exists(out_path_txt):
+            if os.path.exists(out_path_txt) and os.path.getsize(out_path_txt) > 0:
                 logger.info(f"Nikto scan completed with txt format: {out_path_txt}")
                 return out_path_txt, "txt"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Txt format also failed: {e}")
     
     # Check if XML output was created
     if os.path.exists(out_path):
-        logger.info(f"Nikto scan completed: {out_path}")
-        return out_path, "xml"
+        file_size = os.path.getsize(out_path)
+        if file_size > 0:
+            logger.info(f"Nikto scan completed: {out_path} ({file_size} bytes)")
+            return out_path, "xml"
+        else:
+            logger.warning(f"Nikto created empty XML file")
     
-    raise RuntimeError("Nikto did not create output file")
+    # FIX: Better error message
+    raise RuntimeError(
+        f"Nikto did not create valid output file.\n"
+        f"Exit code: {proc.returncode}\n"
+        f"Possible causes:\n"
+        f"  1. Target is unreachable\n"
+        f"  2. Nikto configuration issue\n"
+        f"  3. Network/firewall blocking scan\n"
+        f"Stderr: {proc.stderr[:200] if proc.stderr else 'None'}"
+    )
 
 
-def extract_cves_from_nikto_output(file_path: str, file_format: str = "xml") -> Set[str]:
+def extract_vulnerabilities_from_nikto(file_path: str, file_format: str = "xml") -> List[Dict[str, str]]:
     """
-    Extract CVE IDs from Nikto output file.
+    Extract vulnerabilities from Nikto output file.
+    Nikto reports web configuration issues, NOT CVE IDs.
     
     Args:
         file_path: Path to Nikto output file
         file_format: Format of the file ('xml' or 'txt')
     
     Returns:
-        Set of CVE IDs (uppercase)
+        List of vulnerability dictionaries with keys: description, osvdb, method
     """
-    cves = set()
+    vulnerabilities = []
     
     if not os.path.exists(file_path):
         logger.warning(f"File not found: {file_path}")
-        return cves
+        return vulnerabilities
     
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            text = f.read()
-    except Exception as e:
-        logger.error(f"Error reading file: {e}")
-        return cves
-    
-    # Use regex to find all CVE IDs
-    if extract_cves_regex:
-        cves = extract_cves_regex(text)
-    else:
-        # Fallback regex if nvd_utils not available
-        matches = re.findall(r"CVE-\d{4}-\d{4,7}", text, re.IGNORECASE)
-        cves = set(match.upper() for match in matches)
-    
-    # If XML, also try to parse structure
     if file_format == "xml":
         try:
-            doc = xmltodict.parse(text)
+            import xml.etree.ElementTree as ET
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
             
-            def recursive_search(obj):
-                if isinstance(obj, dict):
-                    for key, value in obj.items():
-                        if key.lower() in ("cve", "cves", "cveid", "cve-id", "reference"):
-                            if isinstance(value, list):
-                                for item in value:
-                                    if isinstance(item, str):
-                                        matches = re.findall(r"CVE-\d{4}-\d{4,7}", item, re.IGNORECASE)
-                                        for match in matches:
-                                            cves.add(match.upper())
-                            elif isinstance(value, str):
-                                matches = re.findall(r"CVE-\d{4}-\d{4,7}", value, re.IGNORECASE)
-                                for match in matches:
-                                    cves.add(match.upper())
-                        else:
-                            recursive_search(value)
-                elif isinstance(obj, list):
-                    for item in obj:
-                        recursive_search(item)
+            root = ET.fromstring(content)
             
-            recursive_search(doc)
+            # Extract all vulnerability items
+            for item in root.findall('.//item'):
+                description = item.get('description', '')
+                osvdb = item.get('osvdb', 'N/A')
+                method = item.get('method', 'GET')
+                
+                if description:
+                    vulnerabilities.append({
+                        "description": description,
+                        "osvdb": osvdb,
+                        "method": method
+                    })
+            
+            logger.info(f"Extracted {len(vulnerabilities)} vulnerabilities from XML")
         except Exception as e:
-            logger.debug(f"XML parsing note: {e}")
+            logger.warning(f"Could not parse XML: {e}")
+            return vulnerabilities
     
-    return cves
+    elif file_format == "txt":
+        # Parse text format if XML failed
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('#') and not line.startswith('-'):
+                    vulnerabilities.append({
+                        "description": line,
+                        "osvdb": "N/A",
+                        "method": "N/A"
+                    })
+            
+            logger.info(f"Extracted {len(vulnerabilities)} vulnerabilities from text")
+        except Exception as e:
+            logger.warning(f"Could not parse text file: {e}")
+    
+    return vulnerabilities
 
 
 def enrich_nikto_results(scan_output_path: str, target: str, timestamp: str, nvd_api_key: Optional[str] = None) -> str:
     """
-    Enrich Nikto scan results with NVD data.
-    
-    Args:
-        scan_output_path: Path to Nikto output file
-        target: Target that was scanned
-        timestamp: Timestamp of the scan
-        nvd_api_key: Optional NVD API key
-    
-    Returns:
-        Path to enriched JSON output file
+    Process Nikto scan results - report web vulnerabilities found.
+    Since Nikto reports config issues, not CVE IDs, we report findings as-is.
     """
-    # Determine file format
     file_format = "xml" if scan_output_path.endswith(".xml") else "txt"
     
-    logger.info(f"Enriching Nikto results from {scan_output_path}")
+    logger.info(f"Processing Nikto results from {scan_output_path}")
+    logger.info("Nikto reports web configuration vulnerabilities, not CVEs")
     
-    # Extract CVEs
-    cves = extract_cves_from_nikto_output(scan_output_path, file_format)
-    
-    if not cves:
-        logger.info("No CVEs found in Nikto output")
-    else:
-        logger.info(f"Found {len(cves)} CVE(s): {sorted(cves)}")
-    
-    # Enrich with NVD data
-    enriched_data = {}
-    if cves and enrich_cves:
-        enriched_data = enrich_cves(cves, api_key=nvd_api_key)
-    
-    # Build findings list
     findings = []
-    for cve_id in sorted(cves):
-        nvd_data = enriched_data.get(cve_id, {})
-        
+    
+    # Extract vulnerabilities using the new function
+    vulnerabilities = extract_vulnerabilities_from_nikto(scan_output_path, file_format)
+    
+    # Convert to findings format
+    for vuln in vulnerabilities:
         finding = {
-            "cve": cve_id,
-            "title": f"Nikto identified vulnerability: {cve_id}",
-            "description": nvd_data.get("description", "No description available"),
-            "cvss_v3": nvd_data.get("cvss_v3_score"),
-            "cvss_v2": nvd_data.get("cvss_v2_score"),
-            "severity": nvd_data.get("cvss_v3_severity") or nvd_data.get("cvss_v2_severity") or "UNKNOWN",
-            "risk": nvd_data.get("risk", "Unknown"),
-            "references": nvd_data.get("references", [f"https://nvd.nist.gov/vuln/detail/{cve_id}"])
+            "title": vuln["description"],
+            "description": vuln["description"],
+            "type": "Web Configuration Vulnerability",
+            "severity": "Medium",
+            "source": "Nikto Web Scanner",
+            "osvdb_id": vuln.get("osvdb", "N/A"),
+            "method": vuln.get("method", "N/A")
         }
-        
         findings.append(finding)
+    
+    logger.info(f"Found {len(findings)} web vulnerability(ies)")
     
     # Create output JSON
     output_data = {
@@ -243,7 +268,7 @@ def enrich_nikto_results(scan_output_path: str, target: str, timestamp: str, nvd
         "target": target,
         "timestamp": timestamp,
         "scan_output": scan_output_path,
-        "total_cves": len(cves),
+        "total_findings": len(findings),
         "findings": findings
     }
     
@@ -258,35 +283,21 @@ def enrich_nikto_results(scan_output_path: str, target: str, timestamp: str, nvd
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2)
     
-    logger.info(f"Enriched results saved to: {output_path}")
+    logger.info(f"Results saved to: {output_path}")
     
     # Print summary
     print(f"\n{'='*80}")
-    print("=== NIKTO SCAN ENRICHMENT SUMMARY ===")
+    print("=== NIKTO WEB VULNERABILITY SCAN ===")
     print(f"{'='*80}")
     print(f"Target: {target}")
-    print(f"Total CVEs found: {len(cves)}")
+    print(f"Total vulnerabilities found: {len(findings)}")
     
     if findings:
-        # Count by risk level
-        risk_counts = {}
-        for finding in findings:
-            risk = finding.get("risk", "Unknown")
-            risk_counts[risk] = risk_counts.get(risk, 0) + 1
-        
-        print(f"\nRisk Distribution:")
-        for risk in ["Critical", "High", "Medium", "Low", "None", "Unknown"]:
-            count = risk_counts.get(risk, 0)
-            if count > 0:
-                print(f"  {risk}: {count}")
-        
-        print(f"\nTop 5 Vulnerabilities:")
-        sorted_findings = sorted(findings, key=lambda x: x.get("cvss_v3") or x.get("cvss_v2") or 0.0, reverse=True)
-        for i, finding in enumerate(sorted_findings[:5], 1):
-            cvss = finding.get("cvss_v3") or finding.get("cvss_v2") or "N/A"
-            print(f"  {i}. {finding['cve']} - CVSS: {cvss} - Risk: {finding['risk']}")
+        print(f"\nFindings:")
+        for i, finding in enumerate(findings[:10], 1):  # Show first 10
+            print(f"  {i}. {finding['title']}")
     
-    print(f"\nEnriched results: {output_path}")
+    print(f"\nDetailed results: {output_path}")
     print(f"{'='*80}\n")
     
     return output_path

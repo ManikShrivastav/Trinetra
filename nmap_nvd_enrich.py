@@ -11,6 +11,7 @@ import os
 import re
 import json
 import logging
+import html
 import xmltodict
 from datetime import datetime
 from typing import Optional, Set, Dict, Any, List
@@ -27,7 +28,49 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Configuration
-NMAP_TIMEOUT = 300
+NMAP_TIMEOUT = 5000
+
+
+def extract_host_from_target(target: str) -> str:
+    """
+    Remove URL schemes and paths from targets so Nmap can parse them.
+    
+    Args:
+        target: Target string (could be "http://example.com", "example.com", or "1.2.3.4")
+    
+    Returns:
+        Just the hostname or IP that Nmap expects
+    
+    Examples:
+        "http://example.com" -> "example.com"
+        "https://example.com:443/path" -> "example.com"
+        "example.com:8080" -> "example.com"
+        "192.168.1.1" -> "192.168.1.1"
+        "2001:db8::1" -> "2001:db8::1" (IPv6 preserved)
+    """
+    # Remove scheme (http://, https://, ftp://, etc.)
+    if "://" in target:
+        target = target.split("://", 1)[1]
+    
+    # Remove path (everything after first /)
+    if "/" in target:
+        target = target.split("/", 1)[0]
+    
+    # Remove port for non-IPv6 addresses
+    # IPv6 addresses contain colons, so we need to check for brackets or multiple colons
+    if ":" in target:
+        # If it has brackets, it's IPv6 with port like [2001:db8::1]:8080
+        if target.startswith("["):
+            target = target.split("]")[0] + "]"
+            target = target.strip("[]")
+        # If it has multiple colons, it's likely IPv6 without port
+        elif target.count(":") > 1:
+            pass  # Keep as-is, it's IPv6
+        # Single colon means it's hostname:port or IPv4:port
+        else:
+            target = target.split(":", 1)[0]
+    
+    return target.strip()
 
 
 def safe_filename(s):
@@ -45,11 +88,11 @@ def run_nmap_scan(target: str, outdir: str, timeout: int, scripts: str = None, p
     Execute Nmap scanner with vuln scripts and return output path.
     
     Args:
-        target: IP or hostname to scan
+        target: IP or hostname to scan (can include URL scheme)
         outdir: Output directory
         timeout: Scan timeout in seconds
-        scripts: NSE scripts to run
-        ports: Ports to scan
+        scripts: NSE scripts to run (default: "vuln")
+        ports: Ports to scan (default: 1-10000)
     
     Returns:
         Path to the output XML file
@@ -59,48 +102,69 @@ def run_nmap_scan(target: str, outdir: str, timeout: int, scripts: str = None, p
     """
     os.makedirs(outdir, exist_ok=True)
     
-    name = safe_filename(target)
+    # Clean the target for Nmap (remove http://, paths, etc.)
+    nmap_target = extract_host_from_target(target)
+    
+    name = safe_filename(nmap_target)
     timestamp = utc_timestamp()
     out_path = os.path.join(outdir, f"nmap_{name}_{timestamp}.xml")
     
+    # FIX: Use correct script name - "vuln" is built-in, "vulners" requires separate installation
     if scripts is None:
-        scripts = "vulners,vuln"
+        scripts = "vuln"
     
-    # Build command
+    # FIX: Scan first 10000 ports for better coverage
+    if ports is None:
+        ports = "1-10000"
+    
+    # Build command with better options
     cmd = [
         "nmap",
-        "-sV",
-        f"--script={scripts}",
+        "-sV",  # Service version detection
+        "--script", scripts,  # FIX: Use --script instead of --script=
+        "-p", ports,  # FIX: Use -p flag separately
+        "--host-timeout", f"{timeout}s",  # FIX: Add Nmap-level timeout
         "-oX", out_path,
-        target
+        nmap_target  # Use cleaned target
     ]
     
-    if ports:
-        cmd.insert(2, f"-p{ports}")
-    
-    logger.info(f"Running Nmap scan on {target}")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    logger.info(f"Running Nmap scan on {nmap_target} (original: {target})")
+    logger.info(f"Command: {' '.join(cmd)}")  # FIX: Changed to INFO for better debugging
     logger.debug(f"Output: {out_path}")
     
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + 30)  # FIX: Add buffer to subprocess timeout
     except FileNotFoundError:
-        raise RuntimeError("nmap not found in PATH")
+        raise RuntimeError("nmap not found in PATH. Install from https://nmap.org/download.html")
     except subprocess.TimeoutExpired:
         raise RuntimeError(f"Nmap scan timed out after {timeout}s")
     except Exception as e:
         raise RuntimeError(f"Nmap execution error: {e}")
     
-    # Nmap usually returns 0 on success
+    # FIX: Add detailed logging for debugging
+    logger.info(f"Nmap exit code: {proc.returncode}")
+    if proc.stdout:
+        logger.debug(f"Nmap stdout (first 500 chars): {proc.stdout[:500]}")
+    if proc.stderr:
+        logger.warning(f"Nmap stderr: {proc.stderr[:500]}")
+    
+    # Nmap usually returns 0 on success, but can return non-zero even with partial results
     if proc.returncode != 0:
         logger.warning(f"Nmap returned exit code {proc.returncode}")
-        logger.debug(f"stderr: {proc.stderr[:500]}")
+        # Don't fail immediately - check if output was created
     
     # Check if output file was created
     if not os.path.exists(out_path):
-        raise RuntimeError("Nmap did not create output file")
+        raise RuntimeError(f"Nmap did not create output file. Exit code: {proc.returncode}. "
+                          f"Stderr: {proc.stderr[:200] if proc.stderr else 'None'}")
     
-    logger.info(f"Nmap scan completed: {out_path}")
+    # FIX: Check if output file has content
+    file_size = os.path.getsize(out_path)
+    if file_size == 0:
+        raise RuntimeError(f"Nmap created empty output file. Scan may have failed. "
+                          f"Exit code: {proc.returncode}")
+    
+    logger.info(f"Nmap scan completed: {out_path} ({file_size} bytes)")
     return out_path
 
 
@@ -237,6 +301,11 @@ def extract_cves_from_nmap_xml(xml_path: str) -> Set[str]:
             for script in port.get("scripts", []):
                 output = script.get("output", "")
                 script_id = script.get("id", "")
+                
+                # FIX: Decode HTML/XML entities BEFORE regex matching
+                # This converts &#xa; to \n, &#x9; to \t, etc.
+                output = html.unescape(output)
+                
                 text = f"{output} {script_id}"
                 
                 if extract_cves_regex:
@@ -249,6 +318,10 @@ def extract_cves_from_nmap_xml(xml_path: str) -> Set[str]:
         for script in host.get("hostscripts", []):
             output = script.get("output", "")
             script_id = script.get("id", "")
+            
+            # FIX: Decode HTML/XML entities BEFORE regex matching
+            output = html.unescape(output)
+            
             text = f"{output} {script_id}"
             
             if extract_cves_regex:
@@ -450,8 +523,8 @@ if __name__ == "__main__":
     parser.add_argument("target", help="Target IP or hostname")
     parser.add_argument("--outdir", default="scans/nmap", help="Output directory")
     parser.add_argument("--timeout", type=int, default=3600, help="Timeout in seconds")
-    parser.add_argument("--scripts", default="vulners,vuln", help="NSE scripts to run")
-    parser.add_argument("--ports", default=None, help="Ports to scan (e.g., 80,443 or 1-1000)")
+    parser.add_argument("--scripts", default="vuln", help="NSE scripts to run (default: vuln)")
+    parser.add_argument("--ports", default=None, help="Ports to scan (default: common vulnerable ports)")
     parser.add_argument("--nvd-key", default=None, help="NVD API key (optional)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     

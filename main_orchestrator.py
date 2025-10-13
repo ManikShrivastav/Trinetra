@@ -349,22 +349,22 @@ Available workers: nikto, nmap, nuclei
     parser.add_argument(
         "--max-target-workers",
         type=int,
-        default=1,
-        help="Maximum number of targets to scan in parallel (default: 1)"
+        default=5,
+        help="Maximum number of targets to scan in parallel (default: 5)"
     )
     
     parser.add_argument(
         "--worker-timeout",
         type=int,
-        default=None,
+        default=5000,
         help="Timeout for each worker in seconds (default: worker-specific defaults)"
     )
     
     parser.add_argument(
         "--log-level",
-        default="INFO",
+        default="DEBUG",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Logging level (default: INFO)"
+        help="Logging level (default: DEBUG)"
     )
     
     args = parser.parse_args()
