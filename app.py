@@ -53,6 +53,8 @@ security = HTTPBearer()
 active_scans: Dict[str, Dict] = {}
 SCANS_DIR = Path("scans")
 SCANS_DIR.mkdir(exist_ok=True)
+REPORTS_DIR = SCANS_DIR / "reports"
+REPORTS_DIR.mkdir(exist_ok=True)
 
 # Request models
 class LoginRequest(BaseModel):
@@ -204,17 +206,41 @@ def get_cvss_score(cve_data: Dict) -> float:
 
 def load_enriched_data(scan_id: str) -> List[Dict]:
     """
-    Load enriched vulnerability data from scan results.
+    Load enriched vulnerability data for a SPECIFIC scan only.
+    Filters enriched files by matching targets and timestamps from scan result.
     
     Args:
         scan_id: Scan ID
     
     Returns:
-        List of vulnerability dictionaries
+        List of vulnerability dictionaries for THIS scan only
     """
     vulnerabilities = []
     
-    # Check for enriched files in scans directory
+    # First, load the scan result to get targets and timestamps
+    result_file = SCANS_DIR / f"scan_{scan_id}.json"
+    if not result_file.exists():
+        logger.warning(f"Scan result file not found: {result_file}")
+        return []
+    
+    with open(result_file, 'r') as f:
+        scan_data = json.load(f)
+    
+    # Extract target-timestamp pairs for this scan
+    scan_targets = {}
+    for result in scan_data.get('results', []):
+        target = result.get('target')
+        timestamp = result.get('timestamp')
+        if target and timestamp:
+            scan_targets[target] = timestamp
+    
+    if not scan_targets:
+        logger.warning(f"No targets found in scan {scan_id}")
+        return []
+    
+    logger.info(f"Loading enriched data for scan {scan_id}: {len(scan_targets)} targets")
+    
+    # Check for enriched files matching THIS scan's targets and timestamps
     scan_dirs = ['nmap', 'nikto', 'nuclei']
     
     for scan_type in scan_dirs:
@@ -222,38 +248,103 @@ def load_enriched_data(scan_id: str) -> List[Dict]:
         if not enriched_dir.exists():
             continue
         
-        # Find enriched files related to this scan
-        for enriched_file in enriched_dir.glob(f'*enriched*.json'):
-            try:
-                with open(enriched_file, 'r') as f:
-                    data = json.load(f)
+        # Find enriched files matching our scan's targets and timestamps
+        for target, timestamp in scan_targets.items():
+            # Match pattern: files with this timestamp
+            pattern = f"*{timestamp}*.json"
+            matching_files = list(enriched_dir.glob(pattern))
+            
+            for enriched_file in matching_files:
+                try:
+                    with open(enriched_file, 'r') as f:
+                        data = json.load(f)
                     
-                    # Parse enriched data structure
-                    if 'enriched_cves' in data:
-                        for cve_id, cve_data in data['enriched_cves'].items():
-                            cvss_score = get_cvss_score(cve_data)
+                    # Double-check this file is for our target and timestamp
+                    file_target = data.get('target', '')
+                    file_timestamp = data.get('timestamp', '')
+                    
+                    # Skip if timestamp doesn't match
+                    if file_timestamp != timestamp:
+                        continue
+                    
+                    # Parse enriched data structure - ALL SCANNERS USE "findings" ARRAY
+                    if 'findings' in data and isinstance(data['findings'], list):
+                        for finding in data['findings']:
+                            # Extract CVSS score for severity calculation
+                            cvss_v3 = finding.get('cvss_v3')
+                            cvss_v2 = finding.get('cvss_v2')
+                            cvss_score = cvss_v3 if cvss_v3 is not None else cvss_v2
+                            
+                            # Get CVE ID (may be in 'cve' or 'cve_id' field)
+                            cve_id = finding.get('cve') or finding.get('cve_id', 'N/A')
+                            
+                            # Format references (may be list or string)
+                            references = finding.get('references', [])
+                            if isinstance(references, list):
+                                references_str = ', '.join(references[:3])  # First 3 refs
+                            else:
+                                references_str = str(references)
                             
                             vulnerabilities.append({
                                 'cve_id': cve_id,
-                                'description': cve_data.get('description', 'N/A'),
-                                'cvss_v2': cve_data.get('cvss_v2_score', 'N/A'),
-                                'cvss_v3': cve_data.get('cvss_v3_score', 'N/A'),
-                                'severity': calculate_severity(cvss_score),
-                                'recommendation': cve_data.get('references', 'See NVD for details'),
+                                'description': finding.get('description', finding.get('title', 'N/A')),
+                                'cvss_v2': cvss_v2 if cvss_v2 is not None else 'N/A',
+                                'cvss_v3': cvss_v3 if cvss_v3 is not None else 'N/A',
+                                'severity': finding.get('risk', calculate_severity(cvss_score)),
+                                'recommendation': references_str if references_str else 'See NVD for details',
                                 'source_tool': scan_type.capitalize(),
                                 'target': data.get('target', 'N/A'),
-                                'timestamp': data.get('timestamp', 'N/A')
+                                'timestamp': data.get('timestamp', 'N/A'),
+                                'affected_hosts': finding.get('affected_hosts', []),
+                                'scan_id': scan_id  # Add scan_id for tracking
                             })
-            except Exception as e:
-                logger.error(f"Error loading enriched file {enriched_file}: {e}")
-                continue
+                
+                except Exception as e:
+                    logger.error(f"Error loading enriched file {enriched_file}: {e}")
+                    continue
     
+    logger.info(f"Loaded {len(vulnerabilities)} vulnerabilities for scan {scan_id}")
     return vulnerabilities
+
+
+def deduplicate_vulnerabilities(vulnerabilities: List[Dict]) -> List[Dict]:
+    """
+    Remove duplicate vulnerabilities based on CVE ID + target + source tool.
+    Keeps first occurrence of each unique vulnerability.
+    
+    Args:
+        vulnerabilities: List of vulnerability dictionaries
+    
+    Returns:
+        Deduplicated list
+    """
+    seen = set()
+    unique_vulns = []
+    
+    for vuln in vulnerabilities:
+        # Create unique key: CVE + target + source tool
+        # This handles case where multiple scanners find same CVE
+        key = (
+            vuln.get('cve_id'),
+            vuln.get('target'),
+            vuln.get('source_tool')
+        )
+        
+        if key not in seen:
+            seen.add(key)
+            unique_vulns.append(vuln)
+    
+    if len(vulnerabilities) != len(unique_vulns):
+        logger.info(f"Deduplicated {len(vulnerabilities)} → {len(unique_vulns)} vulnerabilities")
+    
+    return unique_vulns
 
 
 def generate_csv_from_scan(scan_id: str) -> str:
     """
     Generate CSV file from scan results with enriched data.
+    First checks if scan-specific CSV already exists (generated by orchestrator).
+    If not, falls back to legacy enriched data method.
     
     Args:
         scan_id: Scan ID
@@ -261,10 +352,18 @@ def generate_csv_from_scan(scan_id: str) -> str:
     Returns:
         Path to generated CSV file
     """
+    # Check if scan-specific CSV already exists (generated by orchestrator)
+    orchestrator_csv = REPORTS_DIR / f"{scan_id}.csv"
+    if orchestrator_csv.exists():
+        logger.info(f"Using existing CSV for scan {scan_id}: {orchestrator_csv}")
+        return str(orchestrator_csv)
+    
+    # Fallback: Generate from enriched data (legacy method)
+    logger.info(f"Generating CSV from enriched data for scan {scan_id}")
     vulnerabilities = load_enriched_data(scan_id)
     
-    # Create CSV file
-    csv_path = SCANS_DIR / f"scan_{scan_id}_results.csv"
+    # Create CSV file in reports directory
+    csv_path = REPORTS_DIR / f"{scan_id}.csv"
     
     with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['CVE ID', 'Description', 'CVSS v2', 'CVSS v3', 'Severity', 
@@ -468,6 +567,15 @@ def run_scan_background(scan_id: str, targets: List[str], worker_names: List[str
         
         with open(result_file, 'w') as f:
             json.dump(summary, f, indent=2)
+        
+        # Generate CSV file for this scan
+        try:
+            csv_path = main_orchestrator.generate_scan_csv(scan_id, targets)
+            logger.info(f"[{scan_id}] CSV report generated: {csv_path}")
+            active_scans[scan_id]["csv_path"] = csv_path
+        except Exception as csv_error:
+            logger.error(f"[{scan_id}] Failed to generate CSV: {csv_error}")
+            # Don't fail the entire scan if CSV generation fails
         
         # Update status to completed
         active_scans[scan_id]["result_path"] = str(result_file)
@@ -681,6 +789,7 @@ async def get_scan_status(scan_id: str, payload: Dict = Depends(verify_token_dep
 async def get_scan_results(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
     """
     Get the results of a completed scan with enriched vulnerability data (Protected Route - Requires JWT).
+    Returns ONLY vulnerabilities from THIS specific scan (not all historical scans).
     """
     result_file = SCANS_DIR / f"scan_{scan_id}.json"
     
@@ -693,15 +802,21 @@ async def get_scan_results(scan_id: str, payload: Dict = Depends(verify_token_de
     with open(result_file, 'r') as f:
         results = json.load(f)
     
-    # Load enriched vulnerability data
+    # Load enriched vulnerability data (now properly filtered by scan timestamp)
     vulnerabilities = load_enriched_data(scan_id)
+    
+    # Deduplicate in case multiple scanners find same CVE
+    vulnerabilities = deduplicate_vulnerabilities(vulnerabilities)
     
     # Calculate risk summary
     risk_summary = calculate_risk_summary(vulnerabilities)
     
     # Add enriched data to results
+    results['scan_id'] = scan_id  # Add scan_id for frontend
     results['vulnerabilities'] = vulnerabilities
     results['risk_summary'] = risk_summary
+    
+    logger.info(f"Returning {len(vulnerabilities)} unique vulnerabilities for scan {scan_id}")
     
     return results
 
@@ -709,7 +824,7 @@ async def get_scan_results(scan_id: str, payload: Dict = Depends(verify_token_de
 @app.get("/api/export/csv/{scan_id}")
 async def export_csv(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
     """
-    Export scan results as CSV file (Protected Route - Requires JWT).
+    Export scan results as CSV file with deduplicated, scan-specific data (Protected Route - Requires JWT).
     """
     result_file = SCANS_DIR / f"scan_{scan_id}.json"
     
@@ -720,18 +835,44 @@ async def export_csv(scan_id: str, payload: Dict = Depends(verify_token_dependen
         )
     
     try:
-        csv_path = generate_csv_from_scan(scan_id)
+        # Load properly filtered and deduplicated vulnerabilities
+        vulnerabilities = load_enriched_data(scan_id)
+        vulnerabilities = deduplicate_vulnerabilities(vulnerabilities)
         
-        if not os.path.exists(csv_path):
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate CSV file"
-            )
+        # Generate CSV from clean data
+        csv_path = REPORTS_DIR / f"{scan_id}.csv"
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['CVE ID', 'Description', 'CVSS v2', 'CVSS v3', 'Severity', 
+                          'Recommendation', 'Source Tool', 'Target', 'Timestamp']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            writer.writeheader()
+            for vuln in vulnerabilities:
+                writer.writerow({
+                    'CVE ID': vuln['cve_id'],
+                    'Description': vuln['description'][:200] if len(vuln['description']) > 200 else vuln['description'],
+                    'CVSS v2': vuln['cvss_v2'],
+                    'CVSS v3': vuln['cvss_v3'],
+                    'Severity': vuln['severity'].upper() if vuln['severity'] else 'UNKNOWN',
+                    'Recommendation': vuln['recommendation'][:200] if len(vuln['recommendation']) > 200 else vuln['recommendation'],
+                    'Source Tool': vuln['source_tool'],
+                    'Target': vuln['target'],
+                    'Timestamp': vuln['timestamp']
+                })
+        
+        if not csv_path.exists():
+            raise HTTPException(status_code=500, detail="Failed to generate CSV file")
+        
+        logger.info(f"Generated CSV with {len(vulnerabilities)} vulnerabilities for scan {scan_id}")
         
         return FileResponse(
-            path=csv_path,
+            path=str(csv_path),
             filename=f"scan_{scan_id}_results.csv",
-            media_type="text/csv"
+            media_type="text/csv",
+            headers={
+                'Content-Disposition': f'attachment; filename="scan_{scan_id}_results.csv"'
+            }
         )
     except Exception as e:
         logger.exception(f"Error exporting CSV for scan {scan_id}: {e}")
@@ -779,8 +920,9 @@ async def get_scan_history(payload: Dict = Depends(verify_token_dependency)):
                         if isinstance(progress, dict) and "workers" in progress:
                             workers_used = list(progress["workers"].keys())
                 
-                # Load vulnerability data and calculate risk summary
+                # Load vulnerability data and calculate risk summary (deduplicated)
                 vulnerabilities = load_enriched_data(scan_id)
+                vulnerabilities = deduplicate_vulnerabilities(vulnerabilities)
                 risk_summary = calculate_risk_summary(vulnerabilities)
                 
                 history.append({
@@ -804,6 +946,114 @@ async def get_scan_history(payload: Dict = Depends(verify_token_dependency)):
     update_session_history(history)
     
     return history
+
+
+@app.get("/api/scans/{scan_id}")
+async def get_scan_details(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
+    """
+    Get detailed scan information for details.js page (Protected Route - Requires JWT).
+    Returns scan data formatted for the details page with DEDUPLICATED findings.
+    """
+    result_file = SCANS_DIR / f"scan_{scan_id}.json"
+    
+    if not result_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scan {scan_id} not found"
+        )
+    
+    try:
+        with open(result_file, 'r') as f:
+            data = json.load(f)
+        
+        # Load enriched vulnerability data (scan-specific only)
+        vulnerabilities = load_enriched_data(scan_id)
+        
+        # Deduplicate vulnerabilities
+        vulnerabilities = deduplicate_vulnerabilities(vulnerabilities)
+        
+        # Calculate risk summary
+        risk_summary = calculate_risk_summary(vulnerabilities)
+        
+        # Get target(s)
+        targets = []
+        if "results" in data:
+            targets = [r.get("target", "unknown") for r in data["results"]]
+        target = ", ".join(targets) if targets else "unknown"
+        
+        # Format vulnerabilities as "findings" for details.js compatibility
+        findings = []
+        for vuln in vulnerabilities:
+            findings.append({
+                "cve": vuln.get("cve_id", "N/A"),
+                "title": vuln.get("description", "N/A"),
+                "description": vuln.get("description", "N/A"),
+                "severity": vuln.get("severity", "unknown"),
+                "cvss_v3": vuln.get("cvss_v3", "N/A"),
+                "cvss_v2": vuln.get("cvss_v2", "N/A"),
+                "source_tool": vuln.get("source_tool", "Unknown"),
+                "recommendation": vuln.get("recommendation", "N/A"),
+                "target": vuln.get("target", "N/A"),
+                "timestamp": vuln.get("timestamp", "N/A")
+            })
+        
+        # Return formatted response for details.js
+        return {
+            "scan_id": scan_id,
+            "target": target,
+            "timestamp": data.get("scan_timestamp", "unknown"),
+            "total_cves": risk_summary["total_vulnerabilities"],
+            "critical_count": risk_summary["critical_count"],
+            "high_count": risk_summary["high_count"],
+            "medium_count": risk_summary["medium_count"],
+            "low_count": risk_summary["low_count"],
+            "unknown_count": 0,  # Can be calculated if needed
+            "findings": findings,
+            "risk_summary": risk_summary
+        }
+    
+    except Exception as e:
+        logger.exception(f"Error loading scan details for {scan_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load scan details: {str(e)}"
+        )
+
+
+@app.get("/api/scans/{scan_id}/download-csv")
+async def download_scan_csv(scan_id: str, payload: Dict = Depends(verify_token_dependency)):
+    """
+    Download CSV report for a specific scan (Protected Route - Requires JWT).
+    Used by details.js page.
+    """
+    result_file = SCANS_DIR / f"scan_{scan_id}.json"
+    
+    if not result_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"Scan {scan_id} not found"
+        )
+    
+    try:
+        csv_path = generate_csv_from_scan(scan_id)
+        
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to generate CSV file"
+            )
+        
+        return FileResponse(
+            path=csv_path,
+            filename=f"scan_results_{scan_id}.csv",
+            media_type="text/csv"
+        )
+    except Exception as e:
+        logger.exception(f"Error downloading CSV for scan {scan_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download CSV: {str(e)}"
+        )
 
 
 @app.get("/api/system/info")

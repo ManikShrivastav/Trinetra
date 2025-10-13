@@ -307,7 +307,22 @@ function showResults(scanData) {
 
 async function downloadCsv(scanId) {
   try {
-    const response = await fetch(`/api/export/csv/${scanId}`);
+    // Get the auth token from localStorage
+    const authData = localStorage.getItem('trinetra_auth');
+    if (!authData) {
+      alert('Authentication required. Please login again.');
+      return;
+    }
+    
+    const { token } = JSON.parse(authData);
+    
+    // Use fetch with authentication header for file download
+    const response = await fetch(`/api/export/csv/${scanId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
     
     if (!response.ok) {
       throw new Error('Failed to download CSV');

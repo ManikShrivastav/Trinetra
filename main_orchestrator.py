@@ -6,6 +6,7 @@ Coordinates parallel execution of nikto, nmap, and nuclei scanners.
 """
 
 import argparse
+import csv
 import json
 import logging
 import os
@@ -269,6 +270,181 @@ def save_summary(results: List[Dict[str, Any]], outdir: str = "scans") -> str:
     
     logger.info(f"Scan summary saved to: {summary_path}")
     return summary_path
+
+def generate_scan_csv(scan_id: str, targets: List[str]) -> str:
+    """
+    Generate CSV file for a specific scan by processing enriched JSON files.
+    Only processes JSON files for the specific targets in this scan.
+    
+    Args:
+        scan_id: Unique scan identifier
+        targets: List of targets that were scanned
+    
+    Returns:
+        Path to generated CSV file
+    """
+    try:
+        base_dir = Path("scans")
+        output_dir = base_dir / "reports"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        csv_path = output_dir / f"{scan_id}.csv"
+        
+        # Scanner directories to check
+        scanners = ["nmap", "nikto", "nuclei"]
+        
+        # Collect all enriched JSON files for this scan's targets
+        json_files = []
+        for scanner in scanners:
+            enriched_dir = base_dir / scanner / "enriched"
+            if not enriched_dir.exists():
+                continue
+            
+            # Find JSON files matching any of the targets
+            for json_file in enriched_dir.glob("*.json"):
+                # Check if this file belongs to one of our targets
+                file_content = json_file.read_text(encoding='utf-8')
+                try:
+                    data = json.loads(file_content)
+                    file_target = data.get("target", "")
+                    
+                    # Match if target is in our scan's target list
+                    if any(target in file_target or file_target in target for target in targets):
+                        json_files.append((scanner, json_file, data))
+                except json.JSONDecodeError:
+                    logger.warning(f"Skipping malformed JSON: {json_file}")
+                    continue
+        
+        if not json_files:
+            logger.warning(f"No enriched JSON files found for scan {scan_id}")
+            # Create empty CSV with headers
+            with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    'scanner', 'target', 'timestamp', 'cve', 'severity', 
+                    'cvss_score', 'description', 'affected_host', 'affected_port',
+                    'affected_service', 'uri', 'method', 'template_id', 'template_name'
+                ])
+            return str(csv_path)
+        
+        # Process files and write CSV
+        rows_written = 0
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            
+            # Write header
+            writer.writerow([
+                'scanner', 'target', 'timestamp', 'cve', 'severity', 
+                'cvss_score', 'description', 'affected_host', 'affected_port',
+                'affected_service', 'uri', 'method', 'template_id', 'template_name'
+            ])
+            
+            # Process each file
+            for scanner, json_file, data in json_files:
+                target = data.get("target", "N/A")
+                timestamp = data.get("timestamp", "N/A")
+                findings = data.get("findings", [])
+                
+                if not findings:
+                    # No vulnerabilities found
+                    writer.writerow([
+                        scanner, target, timestamp, 'N/A', 'None', '',
+                        'No vulnerabilities found', 'N/A', 'N/A', 'N/A',
+                        'N/A', 'N/A', 'N/A', 'N/A'
+                    ])
+                    rows_written += 1
+                    continue
+                
+                # Process findings based on scanner type
+                if scanner == "nmap":
+                    for finding in findings:
+                        cves = finding.get("cves", [])
+                        if not cves:
+                            continue
+                        
+                        # Nmap findings have affected_hosts array
+                        affected_hosts = finding.get("affected_hosts", [])
+                        if not affected_hosts:
+                            affected_hosts = [{"host": "N/A", "port": "N/A", "service": "N/A"}]
+                        
+                        for cve in cves:
+                            for host_info in affected_hosts:
+                                writer.writerow([
+                                    scanner,
+                                    target,
+                                    timestamp,
+                                    cve.get("id", "N/A"),
+                                    cve.get("severity", "Unknown"),
+                                    cve.get("cvss_score", ""),
+                                    cve.get("description", "")[:500],  # Truncate long descriptions
+                                    host_info.get("host", "N/A"),
+                                    host_info.get("port", "N/A"),
+                                    host_info.get("service", "N/A"),
+                                    'N/A', 'N/A', 'N/A', 'N/A'
+                                ])
+                                rows_written += 1
+                
+                elif scanner == "nikto":
+                    for finding in findings:
+                        cves = finding.get("cves", [])
+                        uri = finding.get("uri", "N/A")
+                        method = finding.get("method", "N/A")
+                        
+                        if not cves:
+                            # Nikto finding without CVE
+                            writer.writerow([
+                                scanner, target, timestamp, 'N/A', 'Unknown', '',
+                                finding.get("description", "N/A")[:500],
+                                'N/A', 'N/A', 'N/A', uri, method, 'N/A', 'N/A'
+                            ])
+                            rows_written += 1
+                        else:
+                            for cve in cves:
+                                writer.writerow([
+                                    scanner, target, timestamp,
+                                    cve.get("id", "N/A"),
+                                    cve.get("severity", "Unknown"),
+                                    cve.get("cvss_score", ""),
+                                    cve.get("description", "")[:500],
+                                    'N/A', 'N/A', 'N/A', uri, method, 'N/A', 'N/A'
+                                ])
+                                rows_written += 1
+                
+                elif scanner == "nuclei":
+                    for finding in findings:
+                        cves = finding.get("cves", [])
+                        template_id = finding.get("template-id", "N/A")
+                        template_name = finding.get("template", "N/A")
+                        
+                        if not cves:
+                            # Nuclei finding without CVE
+                            writer.writerow([
+                                scanner, target, timestamp, 'N/A', 
+                                finding.get("severity", "Unknown"), '',
+                                finding.get("description", "N/A")[:500],
+                                'N/A', 'N/A', 'N/A', 'N/A', 'N/A',
+                                template_id, template_name
+                            ])
+                            rows_written += 1
+                        else:
+                            for cve in cves:
+                                writer.writerow([
+                                    scanner, target, timestamp,
+                                    cve.get("id", "N/A"),
+                                    cve.get("severity", "Unknown"),
+                                    cve.get("cvss_score", ""),
+                                    cve.get("description", "")[:500],
+                                    'N/A', 'N/A', 'N/A', 'N/A', 'N/A',
+                                    template_id, template_name
+                                ])
+                                rows_written += 1
+        
+        logger.info(f"Generated CSV for scan {scan_id}: {csv_path} ({rows_written} rows)")
+        return str(csv_path)
+        
+    except Exception as e:
+        logger.error(f"Error generating CSV for scan {scan_id}: {e}")
+        raise
 
 def print_summary(results: List[Dict[str, Any]]):
     """Print human-readable summary of scan results."""

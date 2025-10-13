@@ -1,8 +1,0 @@
-{
-  "scanner": "nikto",
-  "target": "http://scanme.nmap.org/",
-  "timestamp": "20251011T172913Z",
-  "scan_output": "scans/nikto/nikto_http___scanme.nmap.org__20251011T172913Z.xml",
-  "total_cves": 0,
-  "findings": []
-}

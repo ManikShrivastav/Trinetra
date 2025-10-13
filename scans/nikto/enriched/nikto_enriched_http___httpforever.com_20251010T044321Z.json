@@ -1,8 +1,0 @@
-{
-  "scanner": "nikto",
-  "target": "http://httpforever.com",
-  "timestamp": "20251010T044321Z",
-  "scan_output": "scans/nikto/nikto_http___httpforever.com_20251010T044321Z.xml",
-  "total_cves": 0,
-  "findings": []
-}
