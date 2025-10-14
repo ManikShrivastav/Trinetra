@@ -242,12 +242,22 @@ function showResults(scanData) {
     medium_count: 0,
     low_count: 0
   };
-  
-  // Update counts with risk summary data
+
+  // Update counts with risk summary data and persist to localStorage
   document.getElementById('criticalCount').textContent = riskSummary.critical_count;
   document.getElementById('highCount').textContent = riskSummary.high_count;
   document.getElementById('mediumCount').textContent = riskSummary.medium_count;
   document.getElementById('lowCount').textContent = riskSummary.low_count;
+
+  localStorage.setItem('criticalCount', riskSummary.critical_count);
+  localStorage.setItem('highCount', riskSummary.high_count);
+  localStorage.setItem('mediumCount', riskSummary.medium_count);
+  localStorage.setItem('lowCount', riskSummary.low_count);
+
+  // Update totalScans count and persist
+  let totalScans = Number(localStorage.getItem('totalScans')) || 0;
+  totalScans += 1;
+  localStorage.setItem('totalScans', totalScans);
 
   // Render vulnerabilities list with enriched data
   const vulnerabilitiesList = document.getElementById('vulnerabilitiesList');

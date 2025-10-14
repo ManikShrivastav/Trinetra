@@ -842,7 +842,7 @@ body.mode-2 {
 .scans-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 30px;
 }
 
 .scan-card {

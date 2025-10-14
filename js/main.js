@@ -1,3 +1,46 @@
+// Vulnerability stat variables
+// Initialize stat variables from localStorage, defaulting to 0 if not present
+let totalScans = Number(localStorage.getItem('totalScans')) || 0;
+let criticalCount = Number(localStorage.getItem('criticalCount')) || 0;
+let mediumCount = Number(localStorage.getItem('mediumCount')) || 0;
+let normalCount = Number(localStorage.getItem('lowCount')) || 0; // normalCount maps to lowCount
+
+// DOM update functions
+function updateTotalScans(val) {
+  totalScans = val;
+  localStorage.setItem('totalScans', totalScans);
+  const el = document.getElementById('totalScans');
+  if (el) el.textContent = totalScans;
+}
+
+function updateCriticalCount(val) {
+  criticalCount = val;
+  localStorage.setItem('criticalCount', criticalCount);
+  const el = document.getElementById('criticalCount');
+  if (el) el.textContent = criticalCount;
+}
+
+function updateMediumCount(val) {
+  mediumCount = val;
+  localStorage.setItem('mediumCount', mediumCount);
+  const el = document.getElementById('mediumCount');
+  if (el) el.textContent = mediumCount;
+}
+
+function updateNormalCount(val) {
+  normalCount = val;
+  localStorage.setItem('lowCount', normalCount); // Save as lowCount for consistency with scan.js
+  const el = document.getElementById('normalCount');
+  if (el) el.textContent = normalCount;
+}
+
+// Initialize all stat values on page load
+window.addEventListener('DOMContentLoaded', () => {
+  updateTotalScans(totalScans);
+  updateCriticalCount(criticalCount);
+  updateMediumCount(mediumCount);
+  updateNormalCount(normalCount);
+});
 const menuToggle = document.getElementById('menuToggle');
 const sidebar = document.getElementById('sidebar');
 const loginBtn = document.getElementById('loginBtn');
