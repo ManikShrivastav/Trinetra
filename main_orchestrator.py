@@ -317,13 +317,12 @@ def generate_scan_csv(scan_id: str, targets: List[str]) -> str:
         
         if not json_files:
             logger.warning(f"No enriched JSON files found for scan {scan_id}")
-            # Create empty CSV with headers
+            # Create empty CSV with headers - UNIFIED FORMAT
             with open(csv_path, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([
-                    'scanner', 'target', 'timestamp', 'cve', 'severity', 
-                    'cvss_score', 'description', 'affected_host', 'affected_port',
-                    'affected_service', 'uri', 'method', 'template_id', 'template_name'
+                    'CVE ID', 'Description', 'CVSS v2', 'CVSS v3', 'Severity', 
+                    'Recommendation', 'Source Tool', 'Target', 'Timestamp'
                 ])
             return str(csv_path)
         
@@ -332,11 +331,10 @@ def generate_scan_csv(scan_id: str, targets: List[str]) -> str:
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
             
-            # Write header
+            # Write header - UNIFIED FORMAT
             writer.writerow([
-                'scanner', 'target', 'timestamp', 'cve', 'severity', 
-                'cvss_score', 'description', 'affected_host', 'affected_port',
-                'affected_service', 'uri', 'method', 'template_id', 'template_name'
+                'CVE ID', 'Description', 'CVSS v2', 'CVSS v3', 'Severity', 
+                'Recommendation', 'Source Tool', 'Target', 'Timestamp'
             ])
             
             # Process each file
@@ -346,98 +344,58 @@ def generate_scan_csv(scan_id: str, targets: List[str]) -> str:
                 findings = data.get("findings", [])
                 
                 if not findings:
-                    # No vulnerabilities found
+                    # No vulnerabilities found - write single row indicating this
                     writer.writerow([
-                        scanner, target, timestamp, 'N/A', 'None', '',
-                        'No vulnerabilities found', 'N/A', 'N/A', 'N/A',
-                        'N/A', 'N/A', 'N/A', 'N/A'
+                        'N/A', 'No vulnerabilities found', 'N/A', 'N/A', 'None',
+                        'No action required', scanner.capitalize(), target, timestamp
                     ])
                     rows_written += 1
                     continue
                 
-                # Process findings based on scanner type
-                if scanner == "nmap":
-                    for finding in findings:
-                        cves = finding.get("cves", [])
-                        if not cves:
-                            continue
-                        
-                        # Nmap findings have affected_hosts array
-                        affected_hosts = finding.get("affected_hosts", [])
-                        if not affected_hosts:
-                            affected_hosts = [{"host": "N/A", "port": "N/A", "service": "N/A"}]
-                        
-                        for cve in cves:
-                            for host_info in affected_hosts:
-                                writer.writerow([
-                                    scanner,
-                                    target,
-                                    timestamp,
-                                    cve.get("id", "N/A"),
-                                    cve.get("severity", "Unknown"),
-                                    cve.get("cvss_score", ""),
-                                    cve.get("description", "")[:500],  # Truncate long descriptions
-                                    host_info.get("host", "N/A"),
-                                    host_info.get("port", "N/A"),
-                                    host_info.get("service", "N/A"),
-                                    'N/A', 'N/A', 'N/A', 'N/A'
-                                ])
-                                rows_written += 1
-                
-                elif scanner == "nikto":
-                    for finding in findings:
-                        cves = finding.get("cves", [])
-                        uri = finding.get("uri", "N/A")
-                        method = finding.get("method", "N/A")
-                        
-                        if not cves:
-                            # Nikto finding without CVE
-                            writer.writerow([
-                                scanner, target, timestamp, 'N/A', 'Unknown', '',
-                                finding.get("description", "N/A")[:500],
-                                'N/A', 'N/A', 'N/A', uri, method, 'N/A', 'N/A'
-                            ])
-                            rows_written += 1
-                        else:
-                            for cve in cves:
-                                writer.writerow([
-                                    scanner, target, timestamp,
-                                    cve.get("id", "N/A"),
-                                    cve.get("severity", "Unknown"),
-                                    cve.get("cvss_score", ""),
-                                    cve.get("description", "")[:500],
-                                    'N/A', 'N/A', 'N/A', uri, method, 'N/A', 'N/A'
-                                ])
-                                rows_written += 1
-                
-                elif scanner == "nuclei":
-                    for finding in findings:
-                        cves = finding.get("cves", [])
-                        template_id = finding.get("template-id", "N/A")
-                        template_name = finding.get("template", "N/A")
-                        
-                        if not cves:
-                            # Nuclei finding without CVE
-                            writer.writerow([
-                                scanner, target, timestamp, 'N/A', 
-                                finding.get("severity", "Unknown"), '',
-                                finding.get("description", "N/A")[:500],
-                                'N/A', 'N/A', 'N/A', 'N/A', 'N/A',
-                                template_id, template_name
-                            ])
-                            rows_written += 1
-                        else:
-                            for cve in cves:
-                                writer.writerow([
-                                    scanner, target, timestamp,
-                                    cve.get("id", "N/A"),
-                                    cve.get("severity", "Unknown"),
-                                    cve.get("cvss_score", ""),
-                                    cve.get("description", "")[:500],
-                                    'N/A', 'N/A', 'N/A', 'N/A', 'N/A',
-                                    template_id, template_name
-                                ])
-                                rows_written += 1
+                # Process findings - ALL SCANNERS now use consistent enriched structure
+                for finding in findings:
+                    # Extract CVE ID (direct field, not nested)
+                    cve_id = finding.get("cve", "N/A")
+                    
+                    # Extract description/title
+                    description = finding.get("description", finding.get("title", "N/A"))
+                    if description and len(description) > 500:
+                        description = description[:497] + "..."
+                    
+                    # Extract CVSS scores (v2 and v3 separately)
+                    cvss_v2 = finding.get("cvss_v2")
+                    cvss_v3 = finding.get("cvss_v3")
+                    cvss_v2_str = str(cvss_v2) if cvss_v2 is not None else "N/A"
+                    cvss_v3_str = str(cvss_v3) if cvss_v3 is not None else "N/A"
+                    
+                    # Extract severity (risk field in enriched data)
+                    severity = finding.get("risk", finding.get("severity", "Unknown"))
+                    if severity:
+                        severity = severity.upper()
+                    
+                    # Extract references/recommendations
+                    references = finding.get("references", [])
+                    if isinstance(references, list):
+                        recommendation = ", ".join(references[:3])  # First 3 references
+                    else:
+                        recommendation = str(references) if references else "See NVD for details"
+                    
+                    if recommendation and len(recommendation) > 500:
+                        recommendation = recommendation[:497] + "..."
+                    
+                    # Write row in unified format
+                    writer.writerow([
+                        cve_id,
+                        description,
+                        cvss_v2_str,
+                        cvss_v3_str,
+                        severity,
+                        recommendation,
+                        scanner.capitalize(),
+                        target,
+                        timestamp
+                    ])
+                    rows_written += 1
         
         logger.info(f"Generated CSV for scan {scan_id}: {csv_path} ({rows_written} rows)")
         return str(csv_path)
